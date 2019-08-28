@@ -20,21 +20,21 @@ import Data.Maybe
 import Data.Monoid
 import Data.Proxy
 
-data RXState = RXState
+data RXState n = RXState
     { buf :: Maybe Bit
     , cnt :: Int
-    , phase :: RXPhase
+    , phase :: RXPhase n
     }
     deriving (Generic, NFData, Show, Undefined)
 
-data RXPhase
+data RXPhase n
     = Idle
     | Start
-    | Bit (Index 8) (Unsigned 8)
-    | Stop (Unsigned 8)
+    | Bit (Index n) (Unsigned n)
+    | Stop (Unsigned n)
     deriving (Generic, NFData, Show, Undefined)
 
-rx0 :: Int -> Bit -> State RXState (Maybe (Unsigned 8))
+rx0 :: (KnownNat n) => Int -> Bit -> State (RXState n) (Maybe (Unsigned n))
 rx0 halfRate bit = do
     s@RXState{..} <- get
     sampled <- do
@@ -56,11 +56,11 @@ rx0 halfRate bit = do
     goto ph = modify $ \s -> s{ cnt = 0, buf = Nothing, phase = ph }
 
 serialRX
-    :: forall rate dom proxy. (KnownNat rate, KnownNat (ClockDivider dom (rate `Div` 2)))
+    :: forall n rate dom proxy. (KnownNat n, KnownNat rate, KnownNat (ClockDivider dom (rate `Div` 2)))
     => (HiddenClockResetEnable dom)
     => proxy rate
     -> Signal dom Bit
-    -> Signal dom (Maybe (Unsigned 8))
+    -> Signal dom (Maybe (Unsigned n))
 serialRX rate = mealyState (rx0 $ fromIntegral . natVal $ Proxy @(ClockDivider dom (rate `Div` 2))) s0
   where
     s0 = RXState{ cnt = 0, buf = Nothing, phase = Idle }
