@@ -3,6 +3,7 @@
 module RetroClash.SevenSegment
     ( encodeHexSS
     , showSS
+    , showSSs
     , muxRR
     -- , bytesSS
     ) where
@@ -85,3 +86,6 @@ showSS (a :> b :> c :> d :> e :> f :> g :> Nil) = unlines . L.concat $
       where
         part True  = "#"
         part False = "."
+
+showSSs :: [Vec 7 Bool] -> String
+showSSs = unlines . L.map (L.intercalate "  ") . L.transpose . L.map (lines . showSS)
