@@ -12,7 +12,7 @@ import qualified Data.List as L
 import RetroClash.Utils (countTo, oneHot, nextIdx)
 
 muxRR
-    :: forall n div dom a. (KnownNat n, Eq div, Enum div, Num div, Undefined div, HiddenClockResetEnable dom)
+    :: forall n div dom a. (KnownNat n, Eq div, Enum div, Num div, NFDataX div, HiddenClockResetEnable dom)
     => div
     -> Signal dom (Vec n a)
     -> (Signal dom (Vec n Bool), Signal dom a)

@@ -25,7 +25,7 @@ activeHigh = boolToBit
 activeLow :: Bool -> Bit
 activeLow = complement . activeHigh
 
-countTo :: (Eq a, Enum a, Undefined a, HiddenClockResetEnable dom) => a -> a -> Signal dom a
+countTo :: (Eq a, Enum a, NFDataX a, HiddenClockResetEnable dom) => a -> a -> Signal dom a
 countTo start target = counter
   where
     counter = register start $ mux (counter .==. pure target) (pure start) (succ <$> counter)
@@ -44,12 +44,12 @@ predIdx :: (Eq a, Enum a, Bounded a) => a -> Maybe a
 predIdx x | x == minBound = Nothing
           | otherwise = Just $ pred x
 
-mealyState :: (HiddenClockResetEnable dom, Undefined s)
+mealyState :: (HiddenClockResetEnable dom, NFDataX s)
            => (i -> State s o) -> s -> (Signal dom i -> Signal dom o)
 mealyState = mealyStateSlow (pure True)
 
 mealyStateSlow
-    :: (HiddenClockResetEnable dom, Undefined s)
+    :: (HiddenClockResetEnable dom, NFDataX s)
     => Signal dom Bool
     -> (i -> State s o)
     -> s
