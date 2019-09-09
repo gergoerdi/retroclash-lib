@@ -52,23 +52,23 @@ bytesSS div bytes = (shownDigit, segments)
 
 encodeHexSS :: Unsigned 4 -> Vec 7 Bool
 encodeHexSS n = case n of
-    --                      a      b      c      d      e      f      g
-    0x0 -> $(listToVecTH [  True,  True,  True,  True,  True,  True, False ])
-    0x1 -> $(listToVecTH [ False,  True,  True, False, False, False, False ])
-    0x2 -> $(listToVecTH [  True,  True, False,  True,  True, False,  True ])
-    0x3 -> $(listToVecTH [  True,  True,  True,  True, False, False,  True ])
-    0x4 -> $(listToVecTH [ False,  True,  True, False, False,  True,  True ])
-    0x5 -> $(listToVecTH [  True, False,  True,  True, False,  True,  True ])
-    0x6 -> $(listToVecTH [  True, False,  True,  True,  True,  True,  True ])
-    0x7 -> $(listToVecTH [  True,  True,  True, False, False, False, False ])
-    0x8 -> $(listToVecTH [  True,  True,  True,  True,  True,  True,  True ])
-    0x9 -> $(listToVecTH [  True,  True,  True,  True, False,  True,  True ])
-    0xa -> $(listToVecTH [  True,  True,  True, False,  True,  True,  True ])
-    0xb -> $(listToVecTH [ False, False,  True,  True,  True,  True,  True ])
-    0xc -> $(listToVecTH [  True, False, False,  True,  True,  True, False ])
-    0xd -> $(listToVecTH [ False,  True,  True,  True,  True, False,  True ])
-    0xe -> $(listToVecTH [  True, False, False,  True,  True,  True,  True ])
-    0xf -> $(listToVecTH [  True, False, False, False,  True,  True,  True ])
+    --       a        b        c        d        e        f        g
+    0x0 ->   True :>  True :>  True :>  True :>  True :>  True :> False :> Nil
+    0x1 ->  False :>  True :>  True :> False :> False :> False :> False :> Nil
+    0x2 ->   True :>  True :> False :>  True :>  True :> False :>  True :> Nil
+    0x3 ->   True :>  True :>  True :>  True :> False :> False :>  True :> Nil
+    0x4 ->  False :>  True :>  True :> False :> False :>  True :>  True :> Nil
+    0x5 ->   True :> False :>  True :>  True :> False :>  True :>  True :> Nil
+    0x6 ->   True :> False :>  True :>  True :>  True :>  True :>  True :> Nil
+    0x7 ->   True :>  True :>  True :> False :> False :> False :> False :> Nil
+    0x8 ->   True :>  True :>  True :>  True :>  True :>  True :>  True :> Nil
+    0x9 ->   True :>  True :>  True :>  True :> False :>  True :>  True :> Nil
+    0xa ->   True :>  True :>  True :> False :>  True :>  True :>  True :> Nil
+    0xb ->  False :> False :>  True :>  True :>  True :>  True :>  True :> Nil
+    0xc ->   True :> False :> False :>  True :>  True :>  True :> False :> Nil
+    0xd ->  False :>  True :>  True :>  True :>  True :> False :>  True :> Nil
+    0xe ->   True :> False :> False :>  True :>  True :>  True :>  True :> Nil
+    0xf ->   True :> False :> False :> False :>  True :>  True :>  True :> Nil
 
 showSS :: Vec 7 Bool -> String
 showSS (a :> b :> c :> d :> e :> f :> g :> Nil) = unlines . L.concat $

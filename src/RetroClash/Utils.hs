@@ -1,8 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables, ApplicativeDo #-}
 module RetroClash.Utils
     ( oneHot
-    , activeLow
-    , activeHigh
+    , activeLow, activeHigh
+    , fromActiveLow, fromActiveHigh
     , countTo
     , nextIdx, prevIdx
     , succIdx, predIdx
@@ -24,6 +24,12 @@ activeHigh = boolToBit
 
 activeLow :: Bool -> Bit
 activeLow = complement . activeHigh
+
+fromActiveHigh :: Bit -> Bool
+fromActiveHigh = bitToBool
+
+fromActiveLow :: Bit -> Bool
+fromActiveLow = fromActiveHigh . complement
 
 countTo :: (Eq a, Enum a, NFDataX a, HiddenClockResetEnable dom) => a -> a -> Signal dom a
 countTo start target = counter
