@@ -1,8 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NumericUnderscores #-}
 module RetroClash.Clock
-    ( FromHz
-    , fromHz
+    ( HzToPeriod
     , ClockDivider
     , divider
     ) where
@@ -11,10 +10,7 @@ import Clash.Prelude
 import RetroClash.Utils
 import GHC.Natural
 
-type FromHz rate = 1_000_000_000_000 `Div` rate
-
-fromHz :: Integer -> Natural
-fromHz hz = fromIntegral $ 1_000_000_000_000 `div` hz
+type HzToPeriod (rate :: Nat) = 1_000_000_000_000 `Div` rate
 
 type family ClockPeriod conf where
     ClockPeriod ('DomainConfiguration _ ps _ _ _ _) = ps
