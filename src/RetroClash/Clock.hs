@@ -1,5 +1,5 @@
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE ScopedTypeVariables, NumericUnderscores, PartialTypeSignatures #-}
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module RetroClash.Clock
     ( HzToPeriod
     , ClockDivider
@@ -12,13 +12,12 @@ import GHC.Natural
 
 type HzToPeriod (rate :: Nat) = 1_000_000_000_000 `Div` rate
 
-type family ClockPeriod conf where
-    ClockPeriod ('DomainConfiguration _ ps _ _ _ _) = ps
-
-type ClockDivider dom n = n `Div` ClockPeriod (KnownConf dom)
+type ClockDivider dom n = n `Div` DomainPeriod dom
 
 divider
-    :: forall n proxy dom.
-       (KnownNat n, KnownNat (ClockDivider dom n), HiddenClockResetEnable dom)
-    => proxy n -> Signal dom Bool
-divider _ = countTo @(Index (ClockDivider dom n)) minBound maxBound .==. pure maxBound
+    :: forall ps dom proxy. (HiddenClockResetEnable dom, _)
+    => proxy ps
+    -> Signal dom Bool
+divider _ = cnt .==. 0
+  where
+    cnt = register (0 :: Index (ClockDivider dom ps)) $ nextIdx <$> cnt
