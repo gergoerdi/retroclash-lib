@@ -10,21 +10,17 @@ module RetroClash.SevenSegment
 
 import Clash.Prelude
 import qualified Data.List as L
-import RetroClash.Utils (countTo, oneHot, nextIdx)
+import RetroClash.Utils (countTo, oneHot, nextIdx, roundRobin)
 
 muxRR
     :: forall n div dom a. (KnownNat n, Eq div, Enum div, Num div, NFDataX div, HiddenClockResetEnable dom)
     => div
     -> Signal dom (Vec n a)
     -> (Signal dom (Vec n Bool), Signal dom a)
-muxRR div xs = (selected, current)
+muxRR div xs = (selector, current)
   where
-    i = regEn (0 :: Index n) timer $ nextIdx <$> i
-    selected = bitCoerce . oneHot <$> i
+    (selector, i) = roundRobin div
     current = (!!) <$> xs <*> i
-
-    counter = countTo 0 div
-    timer = counter .==. pure 0
 
 bytesSS
     :: forall n div dom clk sync. (KnownNat n, KnownNat div, HiddenClockResetEnable dom)
@@ -38,7 +34,7 @@ bytesSS div bytes = (shownDigit, segments)
         counter = countTo 0 div
         timer = counter .==. pure 0
 
-    shownDigit = bitCoerce . oneHot <$> digit
+    shownDigit = oneHot <$> digit
     segments = maybe (pure False) encodeHexSS <$> nibble
 
     nibble = (!!) <$> nibbles <*> digit

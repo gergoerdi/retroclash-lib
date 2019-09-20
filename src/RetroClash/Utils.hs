@@ -1,12 +1,14 @@
 {-# LANGUAGE ScopedTypeVariables, ApplicativeDo #-}
 module RetroClash.Utils
-    ( oneHot
-    , activeLow, activeHigh
+    ( activeLow, activeHigh
     , fromActiveLow, fromActiveHigh
     , countTo
     , nextIdx, prevIdx
     , succIdx, predIdx
     , shiftInLeft
+
+    , oneHot
+    , roundRobin
 
     , mealyState
     , mealyStateSlow
@@ -16,8 +18,19 @@ import Clash.Prelude
 import Data.Maybe (fromMaybe)
 import Control.Monad.State
 
-oneHot :: forall n. (KnownNat n) => Index n -> Unsigned n
-oneHot = bit . fromIntegral
+oneHot :: forall n. (KnownNat n) => Index n -> Vec n Bool
+oneHot = bitCoerce @(Unsigned n) . bit . fromIntegral
+
+roundRobin
+    :: forall n div dom a. (KnownNat n, Eq div, Enum div, Num div, NFDataX div, HiddenClockResetEnable dom)
+    => div
+    -> (Signal dom (Vec n Bool), Signal dom (Index n))
+roundRobin div = (selector, i)
+  where
+    i = regEn (0 :: Index n) timer $ nextIdx <$> i
+    selector = bitCoerce . oneHot <$> i
+    counter = countTo 0 div
+    timer = counter .==. pure 0
 
 activeHigh :: Bool -> Bit
 activeHigh = boolToBit
