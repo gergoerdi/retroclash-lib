@@ -1,6 +1,9 @@
-{-# LANGUAGE ScopedTypeVariables, ApplicativeDo #-}
+{-# LANGUAGE ScopedTypeVariables, ApplicativeDo, Rank2Types #-}
 module RetroClash.Utils
-    ( activeLow, activeHigh
+    ( withResetEnableGen
+    , withEnableGen
+
+    , activeLow, activeHigh
     , fromActiveLow, fromActiveHigh
     , countTo
     , nextIdx, prevIdx
@@ -80,3 +83,15 @@ mealyStateSlow tick f s0 x = mealy step s0 (bundle (tick, x))
 
 shiftInLeft :: (BitPack a, KnownNat (BitSize a)) => Bit -> a -> (a, Bit)
 shiftInLeft b bs = bitCoerce (b, bs)
+
+withResetEnableGen
+    :: (KnownDomain dom)
+    => (HiddenClockResetEnable dom => r)
+    -> Clock dom -> r
+withResetEnableGen board clk = withClockResetEnable clk resetGen enableGen board
+
+withEnableGen
+    :: (KnownDomain dom)
+    => (HiddenClockResetEnable dom => r)
+    -> Clock dom -> Reset dom -> r
+withEnableGen board clk rst = withClockResetEnable clk rst enableGen board
