@@ -5,13 +5,18 @@ module RetroClash.Utils
 
     , activeLow, activeHigh
     , fromActiveLow, fromActiveHigh
-    , countTo
-    , nextIdx, prevIdx
-    , succIdx, predIdx
-    , shiftInLeft
+
+    , unchanged
+    , debounce
 
     , oneHot
     , roundRobin
+
+    , countTo
+    , nextIdx, prevIdx
+    , succIdx, predIdx
+    , moreIdx, lessIdx
+    , shiftInLeft
 
     , mealyState
     , mealyStateSlow
@@ -21,19 +26,43 @@ import Clash.Prelude
 import Data.Maybe (fromMaybe)
 import Control.Monad.State
 
+
+withResetEnableGen
+    :: (KnownDomain dom)
+    => (HiddenClockResetEnable dom => r)
+    -> Clock dom -> r
+withResetEnableGen board clk = withClockResetEnable clk resetGen enableGen board
+
+withEnableGen
+    :: (KnownDomain dom)
+    => (HiddenClockResetEnable dom => r)
+    -> Clock dom -> Reset dom -> r
+withEnableGen board clk rst = withClockResetEnable clk rst enableGen board
+
 oneHot :: forall n. (KnownNat n) => Index n -> Vec n Bool
 oneHot = bitCoerce @(Unsigned n) . bit . fromIntegral
 
-roundRobin
-    :: forall n div dom a. (KnownNat n, Eq div, Enum div, Num div, NFDataX div, HiddenClockResetEnable dom)
-    => div
-    -> (Signal dom (Vec n Bool), Signal dom (Index n))
-roundRobin div = (selector, i)
+unchanged :: (HiddenClockResetEnable dom, Eq a, NFDataX a) => a -> Signal dom a -> Signal dom Bool
+unchanged x0 x = x .==. register x0 x
+
+debounce
+    :: forall n a. (Eq a, NFDataX a, KnownNat n, 1 <= n)
+    => forall dom. (HiddenClockResetEnable dom)
+    => SNat n -> a -> Signal dom a -> Signal dom a
+debounce _ init this = regEn init stable this
   where
-    i = regEn (0 :: Index n) timer $ nextIdx <$> i
+    counter = register (0 :: Index n) counter'
+    counter' = mux (unchanged init this) (moreIdx <$> counter) 0
+    stable = counter' .==. pure maxBound
+
+roundRobin
+    :: forall n dom a. (KnownNat n, HiddenClockResetEnable dom)
+    => Signal dom Bool
+    -> (Signal dom (Vec n Bool), Signal dom (Index n))
+roundRobin next = (selector, i)
+  where
+    i = regEn (0 :: Index n) next $ nextIdx <$> i
     selector = bitCoerce . oneHot <$> i
-    counter = countTo 0 div
-    timer = counter .==. pure 0
 
 activeHigh :: Bool -> Bit
 activeHigh = boolToBit
@@ -57,6 +86,12 @@ nextIdx = fromMaybe minBound . succIdx
 
 prevIdx :: (Eq a, Enum a, Bounded a) => a -> a
 prevIdx = fromMaybe maxBound . predIdx
+
+moreIdx :: (Eq a, Enum a, Bounded a) => a -> a
+moreIdx = fromMaybe maxBound . succIdx
+
+lessIdx :: (Eq a, Enum a, Bounded a) => a -> a
+lessIdx = fromMaybe minBound . predIdx
 
 succIdx :: (Eq a, Enum a, Bounded a) => a -> Maybe a
 succIdx x | x == maxBound = Nothing
@@ -83,15 +118,3 @@ mealyStateSlow tick f s0 x = mealy step s0 (bundle (tick, x))
 
 shiftInLeft :: (BitPack a, KnownNat (BitSize a)) => Bit -> a -> (a, Bit)
 shiftInLeft b bs = bitCoerce (b, bs)
-
-withResetEnableGen
-    :: (KnownDomain dom)
-    => (HiddenClockResetEnable dom => r)
-    -> Clock dom -> r
-withResetEnableGen board clk = withClockResetEnable clk resetGen enableGen board
-
-withEnableGen
-    :: (KnownDomain dom)
-    => (HiddenClockResetEnable dom => r)
-    -> Clock dom -> Reset dom -> r
-withEnableGen board clk rst = withClockResetEnable clk rst enableGen board

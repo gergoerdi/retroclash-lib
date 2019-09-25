@@ -19,7 +19,7 @@ muxRR
     -> (Signal dom (Vec n Bool), Signal dom a)
 muxRR div xs = (selector, current)
   where
-    (selector, i) = roundRobin div
+    (selector, i) = roundRobin (countTo 0 div .==. 0)
     current = (!!) <$> xs <*> i
 
 bytesSS
