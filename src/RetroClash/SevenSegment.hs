@@ -13,13 +13,13 @@ import qualified Data.List as L
 import RetroClash.Utils (countTo, oneHot, nextIdx, roundRobin)
 
 muxRR
-    :: forall n div dom a. (KnownNat n, Eq div, Enum div, Num div, NFDataX div, HiddenClockResetEnable dom)
-    => div
+    :: (KnownNat n, HiddenClockResetEnable dom)
+    => Signal dom Bool
     -> Signal dom (Vec n a)
     -> (Signal dom (Vec n Bool), Signal dom a)
-muxRR div xs = (selector, current)
+muxRR tick xs = (selector, current)
   where
-    (selector, i) = roundRobin (countTo 0 div .==. 0)
+    (selector, i) = roundRobin tick
     current = (!!) <$> xs <*> i
 
 bytesSS
