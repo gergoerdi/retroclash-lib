@@ -6,6 +6,9 @@ module RetroClash.Utils
     , activeLow, activeHigh
     , fromActiveLow, fromActiveHigh
 
+    , (.==)
+    , (==.)
+
     , unchanged
     , debounce
 
@@ -25,7 +28,7 @@ module RetroClash.Utils
 import Clash.Prelude
 import Data.Maybe (fromMaybe)
 import Control.Monad.State
-
+import RetroClash.Clock
 
 withResetEnableGen
     :: (KnownDomain dom)
@@ -46,12 +49,11 @@ unchanged :: (HiddenClockResetEnable dom, Eq a, NFDataX a) => a -> Signal dom a 
 unchanged x0 x = x .==. register x0 x
 
 debounce
-    :: forall n a. (Eq a, NFDataX a, KnownNat n, 1 <= n)
-    => forall dom. (HiddenClockResetEnable dom)
-    => SNat n -> a -> Signal dom a -> Signal dom a
+    :: forall ps a dom. (Eq a, NFDataX a, HiddenClockResetEnable dom, KnownNat (ClockDivider dom ps))
+    => SNat ps -> a -> Signal dom a -> Signal dom a
 debounce _ init this = regEn init stable this
   where
-    counter = register (0 :: Index n) counter'
+    counter = register (0 :: Index (ClockDivider dom ps)) counter'
     counter' = mux (unchanged init this) (moreIdx <$> counter) 0
     stable = counter' .==. pure maxBound
 
@@ -75,6 +77,14 @@ fromActiveHigh = bitToBool
 
 fromActiveLow :: Bit -> Bool
 fromActiveLow = fromActiveHigh . complement
+
+infix 4 ==.
+(==.) :: (Eq a, Applicative f) => a -> f a -> f Bool
+x ==. fy = pure x .==. fy
+
+infix 4 .==
+(.==) :: (Eq a, Applicative f) => f a -> a -> f Bool
+fx .== y = fx .==. pure y
 
 countTo :: (Eq a, Enum a, NFDataX a, HiddenClockResetEnable dom) => a -> a -> Signal dom a
 countTo start target = counter
