@@ -1,10 +1,13 @@
 module RetroClash.Keypad
     ( Matrix(..), KeyStates(..), KeyEvent(..), KeyEvents(..)
     , scanKeypad, keypadEvents
+    , pressedKeys
+    , firstJust2D
     ) where
 
 import Clash.Prelude
 import RetroClash.Utils
+import Control.Monad (mplus)
 
 type Matrix rows cols a = Vec rows (Vec cols a)
 
@@ -44,3 +47,12 @@ keypadEvents states = zipWith (zipWith event) <$> delayed <*> states
     event False True = Just Pressed
     event True False = Just Released
     event _ _ = Nothing
+
+pressedKeys :: Matrix rows cols a -> KeyEvents rows cols  -> Matrix rows cols (Maybe a)
+pressedKeys = zipWith (zipWith decode)
+  where
+    decode mapping (Just Pressed) = Just mapping
+    decode _ _ = Nothing
+
+firstJust2D :: Matrix rows cols (Maybe a) -> Maybe a
+firstJust2D = foldl (foldl mplus) Nothing

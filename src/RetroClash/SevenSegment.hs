@@ -1,16 +1,17 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE StandaloneDeriving, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 module RetroClash.SevenSegment
     ( encodeHexSS
     , showSS
     , showSSs
     , muxRR
+    , driveSS
     -- , bytesSS
     ) where
 
 import Clash.Prelude
 import qualified Data.List as L
 import RetroClash.Utils (countTo, oneHot, nextIdx, roundRobin)
+import RetroClash.Clock
 
 muxRR
     :: (KnownNat n, HiddenClockResetEnable dom)
@@ -21,6 +22,16 @@ muxRR tick xs = (selector, current)
   where
     (selector, i) = roundRobin tick
     current = (!!) <$> xs <*> i
+
+driveSS
+    :: (KnownNat n, HiddenClockResetEnable dom, _)
+    => (a -> (Vec 7 Bool, Bool))
+    -> Signal dom (Vec n (Maybe a))
+    -> (Signal dom (Vec n Bool), Signal dom (Vec 7 Bool), Signal dom Bool)
+driveSS draw digits = (anodes, segments, dp)
+  where
+    (anodes, digit) = muxRR (risePeriod (SNat @(Milliseconds 1))) digits
+    (segments, dp) = unbundle $ maybe (repeat False, False) draw <$> digit
 
 bytesSS
     :: forall n div dom clk sync. (KnownNat n, KnownNat div, HiddenClockResetEnable dom)
