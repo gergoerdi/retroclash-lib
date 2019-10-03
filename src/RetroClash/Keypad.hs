@@ -3,10 +3,12 @@ module RetroClash.Keypad
     , scanKeypad, keypadEvents
     , pressedKeys
     , firstJust2D
+    , inputKeypad
     ) where
 
 import Clash.Prelude
 import RetroClash.Utils
+import RetroClash.Clock
 import Control.Monad (mplus)
 
 type Matrix rows cols a = Vec rows (Vec cols a)
@@ -56,3 +58,15 @@ pressedKeys = zipWith (zipWith decode)
 
 firstJust2D :: Matrix rows cols (Maybe a) -> Maybe a
 firstJust2D = foldl (foldl mplus) Nothing
+
+inputKeypad
+    :: (KnownNat rows, KnownNat cols, HiddenClockResetEnable dom, KnownNat (ClockDivider dom (Milliseconds 5)))
+    => Matrix rows cols a
+    -> Signal dom (Vec rows Bool)
+    -> (Signal dom (Vec cols Bool), Signal dom (Maybe a))
+inputKeypad keymap rows = (cols, pressedKey)
+  where
+    (cols, keyState) = scanKeypad rows
+    events = keypadEvents . debounce (SNat @(Milliseconds 5)) (repeat . repeat $ False) $ keyState
+    pressedKey = firstJust2D . pressedKeys keymap <$> events
+
