@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, DataKinds, TypeOperators, GADTs #-}
 {-# LANGUAGE RecordWildCards, TupleSections #-}
 {-# LANGUAGE DeriveGeneric, DeriveAnyClass, FlexibleContexts #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 module RetroClash.SerialTX
     ( TXOut(..)
     , serialTX
@@ -23,7 +24,7 @@ data TXState n
     = TXIdle
     | TXStart (Unsigned n)
     | TXBit (Unsigned n) (Index n)
-    deriving (Show, Eq, Generic, Undefined)
+    deriving (Show, Eq, Generic, NFDataX)
 
 data TXOut dom = TXOut{ txReady :: Signal dom Bool, txOut :: Signal dom Bit }
 
@@ -52,15 +53,14 @@ txDyn tick inp = TXOut{..}
     (txReady, txOut) = unbundle $ mealyStateSlow tick tx0 TXIdle inp
 
 serialTX
-    :: (KnownNat n, 1 <= n, HiddenClockResetEnable dom)
-    => (KnownNat rate, KnownNat (ClockDivider dom rate))
-    => proxy rate
+    :: (KnownNat n, HiddenClockResetEnable dom, _)
+    => SNat rate
     -> Signal dom (Maybe (Unsigned n))
     -> TXOut dom
-serialTX rate = txDyn (divider rate)
+serialTX rate = txDyn (riseRate rate)
 
 fifo
-    :: forall a. (Undefined a)
+    :: forall a. (NFDataX a)
     => forall dom. (HiddenClockResetEnable dom)
     => Signal dom (Maybe a) -> Signal dom Bool -> Signal dom (Maybe a)
 fifo = curry $ mooreB step fst (Nothing, Nothing)

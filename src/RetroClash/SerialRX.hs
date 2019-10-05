@@ -25,14 +25,14 @@ data RXState n = RXState
     , cnt :: Int
     , phase :: RXPhase n
     }
-    deriving (Generic, NFData, Show, Undefined)
+    deriving (Generic, NFData, Show, NFDataX)
 
 data RXPhase n
     = Idle
     | Start
     | Bit (Index n) (Unsigned n)
     | Stop (Unsigned n)
-    deriving (Generic, NFData, Show, Undefined)
+    deriving (Generic, NFData, Show, NFDataX)
 
 rx0 :: (KnownNat n) => Int -> Bit -> State (RXState n) (Maybe (Unsigned n))
 rx0 halfRate bit = do
