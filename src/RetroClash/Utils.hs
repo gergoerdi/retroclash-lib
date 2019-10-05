@@ -19,7 +19,7 @@ module RetroClash.Utils
     , nextIdx, prevIdx
     , succIdx, predIdx
     , moreIdx, lessIdx
-    , shiftInLeft
+    , shiftInFromLeft
 
     , mealyState
     , mealyStateSlow
@@ -126,5 +126,5 @@ mealyStateSlow tick f s0 x = mealy step s0 (bundle (tick, x))
     step s (tick, x) = let (y, s') = runState (f x) s
                        in (if tick then s' else s, y)
 
-shiftInLeft :: (BitPack a, KnownNat (BitSize a)) => Bit -> a -> (a, Bit)
-shiftInLeft b bs = bitCoerce (b, bs)
+shiftInFromLeft :: (BitPack a, KnownNat (BitSize a)) => Bit -> a -> (a, Bit)
+shiftInFromLeft b bs = bitCoerce (b, bs)

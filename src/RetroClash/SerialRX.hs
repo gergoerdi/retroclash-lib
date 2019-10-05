@@ -30,23 +30,23 @@ data RXState n = RXState
 data RXPhase n
     = Idle
     | Start
-    | Bit (Index n) (Unsigned n)
-    | Stop (Unsigned n)
+    | Bit (Index n) (Vec n Bit)
+    | Stop (Vec n Bit)
     deriving (Generic, NFData, Show, NFDataX)
 
-rx0 :: (KnownNat n) => Int -> Bit -> State (RXState n) (Maybe (Unsigned n))
-rx0 halfRate bit = do
+rx0 :: (KnownNat n) => Int -> Bit -> State (RXState n) (Maybe (Vec n Bit))
+rx0 halfPeriod bit = do
     s@RXState{..} <- get
     sampled <- do
-        let atMiddle = cnt == halfRate
+        let atMiddle = cnt == halfPeriod
         modify $ \s -> if atMiddle then s{ cnt = 0, buf = Just bit } else s{ cnt = cnt + 1}
         return $ if atMiddle then buf else Nothing
 
     fmap getLast $ execWriterT $ case phase of
         Idle    | bit == low -> goto Start
-        Start   | Just read <- sampled -> goto $ if read == low then Bit 0 0 else Idle
+        Start   | Just read <- sampled -> goto $ if read == low then Bit 0 (repeat low) else Idle
         Bit i x | Just read <- sampled -> do
-            let (x', _) = shiftInLeft read x
+            let (x', _) = shiftInFromLeft read x
             goto $ maybe Stop Bit (succIdx i) x'
         Stop x  | Just read <- sampled -> do
             when (read == high) $ tell $ Last . Just $ x
@@ -56,11 +56,11 @@ rx0 halfRate bit = do
     goto ph = modify $ \s -> s{ cnt = 0, buf = Nothing, phase = ph }
 
 serialRX
-    :: forall n rate dom proxy. (KnownNat n, KnownNat rate, KnownNat (ClockDivider dom (rate `Div` 2)))
+    :: forall n rate dom. (KnownNat n, KnownNat rate, KnownNat (ClockDivider dom (HzToPeriod (rate * 2))))
     => (HiddenClockResetEnable dom)
-    => proxy rate
+    => SNat rate
     -> Signal dom Bit
-    -> Signal dom (Maybe (Unsigned n))
-serialRX rate = mealyState (rx0 $ fromIntegral . natVal $ Proxy @(ClockDivider dom (rate `Div` 2))) s0
+    -> Signal dom (Maybe (Vec n Bit))
+serialRX rate = mealyState (rx0 $ fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod (rate * 2)))) s0
   where
     s0 = RXState{ cnt = 0, buf = Nothing, phase = Idle }
