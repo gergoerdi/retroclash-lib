@@ -13,51 +13,58 @@ import Control.Monad.Trans.Writer
 import Control.Monad.Trans.Maybe
 import Data.Maybe
 import Data.Monoid
-import Data.Foldable (for_)
+import Data.Foldable (for_, traverse_)
 
-data RXState n = RXState
+data St n = MkSt
     { cnt :: Int
     , buf :: Maybe Bit
-    , phase :: RXPhase n
+    , state :: RXState n
     }
     deriving (Generic, Show, NFDataX)
 
-data RXPhase n
+data RXState n
     = Idle
     | StartBit
     | DataBit (Index n) (Vec n Bit)
     | StopBit (Vec n Bit)
     deriving (Generic, Show, NFDataX)
 
-rx0 :: (KnownNat n) => Int -> Bit -> State (RXState n) (Maybe (Vec n Bit))
-rx0 halfPeriod input = fmap (getLast =<<) $ runMaybeT $ execWriterT $ do
-    s@RXState{..} <- get
-    let sample = do
-            let atMiddle = cnt == halfPeriod
-            put $ if atMiddle then s{ cnt = 0, buf = Just input } else s{ cnt = cnt + 1 }
-            return $ if atMiddle then buf else Nothing
-    case phase of
+rxStep :: (KnownNat n) => Int -> Bit -> State (St n) (Maybe (Vec n Bit))
+rxStep halfPeriod input = fmap getLast $ execWriterT $ do
+    s@MkSt{..} <- get
+    let slowly k = do
+            if cnt == halfPeriod then do
+                put s{ cnt = 0, buf = Just input }
+                mapM_ k buf
+              else do
+                put s{ cnt = cnt + 1}
+    case state of
         Idle -> when (input == low) $ goto StartBit
-        StartBit -> do
-            Just bit <- sample
-            goto $ if bit == low then DataBit 0 (repeat low) else Idle
-        DataBit i x -> do
-            Just bit <- sample
-            let (x', _) = shiftInFromLeft bit x
+        StartBit -> slowly $ \read -> do
+            goto $ if read == low then DataBit 0 (repeat low) else Idle
+        DataBit i x -> slowly $ \read -> do
+            let (x', _) = shiftInFromLeft read x
             goto $ maybe StopBit DataBit (succIdx i) x'
-        StopBit x -> do
-            Just bit <- sample
-            when (bit == high) $ tell $ Last . Just $ x
+        StopBit x -> slowly $ \read -> do
+            when (read == high) $ tell $ Last . Just $ x
             goto Idle
   where
-    goto ph = put RXState{ cnt = 0, buf = Nothing, phase = ph }
+    goto s = put MkSt{ cnt = 0, buf = Nothing, state = s }
+
+serialRXDyn
+    :: (KnownNat n, HiddenClockResetEnable dom)
+    => Int
+    -> Signal dom Bit
+    -> Signal dom (Maybe (Vec n Bit))
+serialRXDyn periodLen = mealyState (rxStep halfPeriod) s0
+  where
+    halfPeriod = periodLen `shiftR` 1
+    s0 = MkSt{ cnt = 0, buf = Nothing, state = Idle }
 
 serialRX
-    :: forall n rate dom. (KnownNat n, KnownNat rate, KnownNat (ClockDivider dom (HzToPeriod (rate * 2))))
+    :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)))
     => (HiddenClockResetEnable dom)
     => SNat rate
     -> Signal dom Bit
     -> Signal dom (Maybe (Vec n Bit))
-serialRX rate = mealyState (rx0 $ fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod (rate * 2)))) s0
-  where
-    s0 = RXState{ cnt = 0, buf = Nothing, phase = Idle }
+serialRX rate = serialRXDyn $ fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod rate))

@@ -20,10 +20,18 @@ import Data.Bits
 import Data.Maybe
 import Data.Foldable (for_)
 
+data St n = MkSt
+    { cnt :: Int
+    , buf :: Maybe Bit
+    , state :: TXState n
+    }
+    deriving (Generic, Show, NFDataX)
+
 data TXState n
-    = TXIdle
-    | TXStart (Vec n Bit)
-    | TXBit (Vec n Bit) (Index n)
+    = Idle
+    | StartBit (Vec n Bit)
+    | DataBit (Vec n Bit) (Index n)
+    | StopBit
     deriving (Show, Eq, Generic, NFDataX)
 
 data TXOut dom = TXOut
@@ -31,42 +39,48 @@ data TXOut dom = TXOut
     , txOut :: Signal dom Bit
     }
 
-tx :: forall n. (KnownNat n) => Maybe (Vec n Bit) -> State (TXState n) (Bool, Bit)
-tx input = do
-    s <- get
-    case s of
-        TXIdle -> do
-            for_ input $ put . TXStart
+txStep :: forall n. (KnownNat n) => Int -> Maybe (Vec n Bit) -> State (St n) (Bool, Bit)
+txStep periodLen input = do
+    s@MkSt{..} <- get
+    let slowly k = do
+            if cnt == periodLen then k else put s{ cnt = cnt + 1 }
+    case state of
+        Idle -> do
+            for_ input $ goto . StartBit
             return (True, high)
-        TXStart x -> do
-            put $ TXBit x 0
+        StartBit x -> do
+            slowly $ goto $ DataBit x 0
             return (False, low)
-        TXBit x i -> do
+        DataBit x i -> do
             let (x', b) = shiftInFromLeft low x
-            put $ maybe TXIdle (TXBit x') $ succIdx i
+            slowly $ goto $ maybe StopBit (DataBit x') $ succIdx i
             return (False, b)
+        StopBit -> do
+            slowly $ goto Idle
+            return (False, high)
+  where
+    goto s = put MkSt{ cnt = 0, buf = Nothing, state = s }
 
-serialTX'
-    :: (KnownNat n, 1 <= n, HiddenClockResetEnable dom)
-    => Signal dom Bool
+serialTXDyn
+    :: (KnownNat n, HiddenClockResetEnable dom)
+    => Int
     -> Signal dom (Maybe (Vec n Bit))
     -> TXOut dom
-serialTX' tick inp = TXOut{..}
+serialTXDyn periodLen inp = TXOut{..}
   where
-    (txReady, txOut) = unbundle $ mealyStateSlow tick tx TXIdle inp
+    (txReady, txOut) = unbundle $ mealyState (txStep periodLen) s0 inp
+    s0 = MkSt{ cnt = 0, buf = Nothing, state = Idle }
 
 serialTX
-    :: (KnownNat n, HiddenClockResetEnable dom, _)
+    :: forall n rate dom. (KnownNat n, HiddenClockResetEnable dom, _)
     => SNat rate
     -> Signal dom (Maybe (Vec n Bit))
     -> TXOut dom
-serialTX rate = serialTX' (riseRate rate)
+serialTX rate = serialTXDyn $ fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod rate))
 
 fifo
     :: forall a dom. (NFDataX a, HiddenClockResetEnable dom)
     => Signal dom (Maybe a) -> Signal dom Bool -> Signal dom (Maybe a)
-fifo input outReady = mooreB step fst (Nothing, Nothing) (input, outReady)
+fifo input outReady = r
   where
-    step (current, saved) (input, outReady) = if outReady then (next, next) else (current, Nothing)
-      where
-        next = input <|> saved
+    r = register Nothing $ mux outReady input (mplus <$> r <*> input)
