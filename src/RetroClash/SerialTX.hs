@@ -1,6 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, DataKinds, TypeOperators, GADTs #-}
-{-# LANGUAGE RecordWildCards, TupleSections #-}
-{-# LANGUAGE DeriveGeneric, DeriveAnyClass, FlexibleContexts #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PartialTypeSignatures #-}
 module RetroClash.SerialTX
     ( TXOut(..)
@@ -12,12 +10,7 @@ import Clash.Prelude
 import RetroClash.Utils
 import RetroClash.Clock
 
-import Control.Category ((>>>))
 import Control.Monad.State
-import Data.Word
-import Data.Int
-import Data.Bits
-import Data.Maybe
 import Data.Foldable (for_)
 
 data St n = MkSt
@@ -42,8 +35,7 @@ data TXOut dom = TXOut
 txStep :: forall n. (KnownNat n) => Int -> Maybe (Vec n Bit) -> State (St n) (Bool, Bit)
 txStep periodLen input = do
     s@MkSt{..} <- get
-    let slowly k = do
-            if cnt == periodLen then k else put s{ cnt = cnt + 1 }
+    let slowly k = if cnt == periodLen then k else put s{ cnt = cnt + 1 }
     case state of
         Idle -> do
             for_ input $ goto . StartBit
@@ -72,7 +64,7 @@ serialTXDyn periodLen inp = TXOut{..}
     s0 = MkSt{ cnt = 0, buf = Nothing, state = Idle }
 
 serialTX
-    :: forall n rate dom. (KnownNat n, HiddenClockResetEnable dom, _)
+    :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
     => SNat rate
     -> Signal dom (Maybe (Vec n Bit))
     -> TXOut dom

@@ -7,13 +7,9 @@ import Clash.Prelude
 import RetroClash.Utils
 import RetroClash.Clock
 
-import Control.Category ((>>>))
-import Control.Monad.State hiding (state)
+import Control.Monad.State
 import Control.Monad.Trans.Writer
-import Control.Monad.Trans.Maybe
-import Data.Maybe
 import Data.Monoid
-import Data.Foldable (for_, traverse_)
 
 data St n = MkSt
     { cnt :: Int
@@ -62,8 +58,7 @@ serialRXDyn periodLen = mealyState (rxStep halfPeriod) s0
     s0 = MkSt{ cnt = 0, buf = Nothing, state = Idle }
 
 serialRX
-    :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)))
-    => (HiddenClockResetEnable dom)
+    :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
     => SNat rate
     -> Signal dom Bit
     -> Signal dom (Maybe (Vec n Bit))
