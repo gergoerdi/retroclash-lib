@@ -15,7 +15,6 @@ import Data.Foldable (for_)
 
 data St n = MkSt
     { cnt :: Int
-    , buf :: Maybe Bit
     , state :: TXState n
     }
     deriving (Generic, Show, NFDataX)
@@ -51,7 +50,7 @@ txStep periodLen input = do
             slowly $ goto Idle
             return (False, high)
   where
-    goto s = put MkSt{ cnt = 0, buf = Nothing, state = s }
+    goto s = put MkSt{ cnt = 0, state = s }
 
 serialTXDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
@@ -61,7 +60,7 @@ serialTXDyn
 serialTXDyn periodLen inp = TXOut{..}
   where
     (txReady, txOut) = unbundle $ mealyState (txStep periodLen) s0 inp
-    s0 = MkSt{ cnt = 0, buf = Nothing, state = Idle }
+    s0 = MkSt{ cnt = 0, state = Idle }
 
 serialTX
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
