@@ -12,9 +12,10 @@ import RetroClash.Clock
 
 import Control.Monad.State
 import Data.Foldable (for_)
+import Data.Word
 
 data St n = MkSt
-    { cnt :: Int
+    { cnt :: Word32
     , state :: TXState n
     }
     deriving (Generic, Show, NFDataX)
@@ -31,7 +32,7 @@ data TXOut dom = TXOut
     , txOut :: Signal dom Bit
     }
 
-txStep :: forall n. (KnownNat n) => Int -> Maybe (Vec n Bit) -> State (St n) (Bool, Bit)
+txStep :: forall n. (KnownNat n) => Word32 -> Maybe (Vec n Bit) -> State (St n) (Bool, Bit)
 txStep periodLen input = do
     s@MkSt{..} <- get
     let slowly k = if cnt == periodLen then k else put s{ cnt = cnt + 1 }
@@ -54,12 +55,12 @@ txStep periodLen input = do
 
 serialTXDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
-    => Int
+    => Signal dom Word32
     -> Signal dom (Maybe (Vec n Bit))
     -> TXOut dom
 serialTXDyn periodLen inp = TXOut{..}
   where
-    (txReady, txOut) = unbundle $ mealyState (txStep periodLen) s0 inp
+    (txReady, txOut) = mealyStateB (uncurry txStep) s0 (periodLen, inp)
     s0 = MkSt{ cnt = 0, state = Idle }
 
 serialTX
@@ -67,7 +68,7 @@ serialTX
     => SNat rate
     -> Signal dom (Maybe (Vec n Bit))
     -> TXOut dom
-serialTX rate = serialTXDyn $ fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod rate))
+serialTX rate = serialTXDyn $ pure . fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod rate))
 
 fifo
     :: forall a dom. (NFDataX a, HiddenClockResetEnable dom)
