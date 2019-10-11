@@ -22,7 +22,8 @@ module RetroClash.Utils
     , shiftInFromLeft
 
     , mealyState
-    , mealyStateSlow
+    , mealyStateB
+    -- , mealyStateSlow
     ) where
 
 import Clash.Prelude
@@ -111,20 +112,28 @@ predIdx :: (Eq a, Enum a, Bounded a) => a -> Maybe a
 predIdx x | x == minBound = Nothing
           | otherwise = Just $ pred x
 
-mealyState :: (HiddenClockResetEnable dom, NFDataX s)
-           => (i -> State s o) -> s -> (Signal dom i -> Signal dom o)
-mealyState = mealyStateSlow (pure True)
-
-mealyStateSlow
-    :: (HiddenClockResetEnable dom, NFDataX s)
-    => Signal dom Bool
-    -> (i -> State s o)
-    -> s
-    -> (Signal dom i -> Signal dom o)
-mealyStateSlow tick f s0 x = mealy step s0 (bundle (tick, x))
+mealyState
+   :: (HiddenClockResetEnable dom, NFDataX s)
+   => (i -> State s o) -> s -> (Signal dom i -> Signal dom o)
+mealyState f s0 x = mealy step s0 x
   where
-    step s (tick, x) = let (y, s') = runState (f x) s
-                       in (if tick then s' else s, y)
+    step s x = let (y, s') = runState (f x) s in (s', y)
+
+mealyStateB
+    :: (HiddenClockResetEnable dom, NFDataX s, Bundle i, Bundle o)
+    => (i -> State s o) -> s -> (Unbundled dom i -> Unbundled dom o)
+mealyStateB f s0 = unbundle . mealyState f s0 . bundle
+
+-- mealyStateSlow
+--     :: (HiddenClockResetEnable dom, NFDataX s)
+--     => Signal dom Bool
+--     -> (i -> State s o)
+--     -> s
+--     -> (Signal dom i -> Signal dom o)
+-- mealyStateSlow tick f s0 x = mealy step s0 (bundle (tick, x))
+--   where
+--     step s (tick, x) = let (y, s') = runState (f x) s
+--                        in (if tick then s' else s, y)
 
 shiftInFromLeft :: (BitPack a, KnownNat (BitSize a)) => Bit -> a -> (a, Bit)
 shiftInFromLeft b bs = bitCoerce (b, bs)
