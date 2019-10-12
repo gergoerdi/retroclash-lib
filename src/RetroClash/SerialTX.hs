@@ -14,15 +14,13 @@ import Control.Monad.State
 import Data.Foldable (for_)
 import Data.Word
 
-data St n = MkSt
-    { cnt :: Word32
-    , state :: TXState n
-    }
-    deriving (Generic, Show, NFDataX)
-
 data TXState n
     = Idle
-    | StartBit (Vec n Bit)
+    | Slowly Word32 (TXBit n)
+    deriving (Show, Eq, Generic, NFDataX)
+
+data TXBit n
+    = StartBit (Vec n Bit)
     | DataBit (Vec n Bit) (Index n)
     | StopBit
     deriving (Show, Eq, Generic, NFDataX)
@@ -32,26 +30,28 @@ data TXOut dom = TXOut
     , txOut :: Signal dom Bit
     }
 
-txStep :: forall n. (KnownNat n) => Word32 -> Maybe (Vec n Bit) -> State (St n) (Bool, Bit)
+txStep :: forall n. (KnownNat n) => Word32 -> Maybe (Vec n Bit) -> State (TXState n) (Bool, Bit)
 txStep periodLen input = do
-    s@MkSt{..} <- get
-    let slowly k = if cnt == periodLen then k else put s{ cnt = cnt + 1 }
-    case state of
+    s <- get
+    case s of
         Idle -> do
             for_ input $ goto . StartBit
             return (True, high)
-        StartBit x -> do
-            slowly $ goto $ DataBit x 0
-            return (False, low)
-        DataBit x i -> do
-            let (x', b) = shiftInFromLeft low x
-            slowly $ goto $ maybe StopBit (DataBit x') $ succIdx i
-            return (False, b)
-        StopBit -> do
-            slowly $ goto Idle
-            return (False, high)
+        Slowly cnt txBit -> do
+            let slowly k = if cnt == periodLen then k else put (Slowly (cnt + 1) txBit)
+            case txBit of
+                StartBit x -> do
+                    slowly $ goto $ DataBit x 0
+                    return (False, low)
+                DataBit x i -> do
+                    let (x', b) = shiftInFromLeft low x
+                    slowly $ goto $ maybe StopBit (DataBit x') $ succIdx i
+                    return (False, b)
+                StopBit -> do
+                    slowly $ put Idle
+                    return (False, high)
   where
-    goto s = put MkSt{ cnt = 0, state = s }
+    goto = put . Slowly 0
 
 serialTXDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
@@ -60,8 +60,7 @@ serialTXDyn
     -> TXOut dom
 serialTXDyn periodLen inp = TXOut{..}
   where
-    (txReady, txOut) = mealyStateB (uncurry txStep) s0 (periodLen, inp)
-    s0 = MkSt{ cnt = 0, state = Idle }
+    (txReady, txOut) = mealyStateB (uncurry txStep) Idle (periodLen, inp)
 
 serialTX
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
