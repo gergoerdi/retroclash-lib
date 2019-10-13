@@ -1,8 +1,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE PartialTypeSignatures #-}
-module RetroClash.SerialTX
-    ( TXOut(..)
-    , serialTX
+module RetroClash.SerialTx
+    ( TxOut(..)
+    , serialTx
     , fifo
     ) where
 
@@ -14,23 +14,23 @@ import Control.Monad.State
 import Data.Foldable (for_)
 import Data.Word
 
-data TXState n
+data TxState n
     = Idle
-    | Slowly Word32 (TXBit n)
+    | Slowly Word32 (TxBit n)
     deriving (Show, Eq, Generic, NFDataX)
 
-data TXBit n
+data TxBit n
     = StartBit (Vec n Bit)
     | DataBit (Vec n Bit) (Index n)
     | StopBit
     deriving (Show, Eq, Generic, NFDataX)
 
-data TXOut dom = TXOut
+data TxOut dom = TxOut
     { txReady :: Signal dom Bool
     , txOut :: Signal dom Bit
     }
 
-txStep :: forall n. (KnownNat n) => Word32 -> Maybe (Vec n Bit) -> State (TXState n) (Bool, Bit)
+txStep :: forall n. (KnownNat n) => Word32 -> Maybe (Vec n Bit) -> State (TxState n) (Bool, Bit)
 txStep periodLen input = do
     s <- get
     case s of
@@ -53,21 +53,21 @@ txStep periodLen input = do
   where
     goto = put . Slowly 0
 
-serialTXDyn
+serialTxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
     => Signal dom Word32
     -> Signal dom (Maybe (Vec n Bit))
-    -> TXOut dom
-serialTXDyn periodLen inp = TXOut{..}
+    -> TxOut dom
+serialTxDyn periodLen inp = TxOut{..}
   where
     (txReady, txOut) = mealyStateB (uncurry txStep) Idle (periodLen, inp)
 
-serialTX
+serialTx
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
     => SNat rate
     -> Signal dom (Maybe (Vec n Bit))
-    -> TXOut dom
-serialTX rate = serialTXDyn $ pure . fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod rate))
+    -> TxOut dom
+serialTx rate = serialTxDyn $ pure . fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod rate))
 
 fifo
     :: forall a dom. (NFDataX a, HiddenClockResetEnable dom)

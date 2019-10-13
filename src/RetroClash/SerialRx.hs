@@ -1,6 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
-module RetroClash.SerialRX
-    ( serialRX
+module RetroClash.SerialRx
+    ( serialRx
     ) where
 
 import Clash.Prelude
@@ -15,11 +15,11 @@ import Data.Word
 data St n = MkSt
     { cnt :: Word32
     , buf :: Maybe Bit
-    , state :: RXState n
+    , state :: RxState n
     }
     deriving (Generic, Show, NFDataX)
 
-data RXState n
+data RxState n
     = Idle
     | StartBit
     | DataBit (Index n) (Vec n Bit)
@@ -48,19 +48,19 @@ rxStep halfPeriod input = fmap getLast $ execWriterT $ do
   where
     goto s = put MkSt{ cnt = 0, buf = Nothing, state = s }
 
-serialRXDyn
+serialRxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
     => Signal dom Word32
     -> Signal dom Bit
     -> Signal dom (Maybe (Vec n Bit))
-serialRXDyn periodLen input = mealyStateB (uncurry rxStep) s0 (halfPeriod, input)
+serialRxDyn periodLen input = mealyStateB (uncurry rxStep) s0 (halfPeriod, input)
   where
     halfPeriod = (`shiftR` 1) <$> periodLen
     s0 = MkSt{ cnt = 0, buf = Nothing, state = Idle }
 
-serialRX
+serialRx
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
     => SNat rate
     -> Signal dom Bit
     -> Signal dom (Maybe (Vec n Bit))
-serialRX rate = serialRXDyn $ pure . fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod rate))
+serialRx rate = serialRxDyn $ pure . fromIntegral . natVal $ SNat @(ClockDivider dom (HzToPeriod rate))
