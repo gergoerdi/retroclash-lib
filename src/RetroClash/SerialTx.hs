@@ -34,9 +34,11 @@ txStep :: forall n. (KnownNat n) => Word32 -> Maybe (Vec n Bit) -> State (TxStat
 txStep periodLen input = do
     s <- get
     case s of
-        Idle -> do
-            for_ input $ goto . StartBit
-            return (True, high)
+        Idle -> case input of
+            Nothing -> return (False, high)
+            Just x -> do
+                goto $ StartBit x
+                return (True, high)
         Slowly cnt txBit -> do
             let slowly k = if cnt == periodLen then k else put (Slowly (cnt + 1) txBit)
             case txBit of
@@ -44,9 +46,8 @@ txStep periodLen input = do
                     slowly $ goto $ DataBit x 0
                     return (False, low)
                 DataBit x i -> do
-                    let (x', b) = shiftInFromLeft low x
-                    slowly $ goto $ maybe StopBit (DataBit x') $ succIdx i
-                    return (False, b)
+                    slowly $ goto $ maybe StopBit (DataBit $ rotateRightS x (SNat @1)) $ succIdx i
+                    return (False, lsb x)
                 StopBit -> do
                     slowly $ put Idle
                     return (False, high)
