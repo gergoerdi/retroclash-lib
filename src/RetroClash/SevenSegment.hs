@@ -11,7 +11,7 @@ module RetroClash.SevenSegment
 
 import Clash.Prelude
 import qualified Data.List as L
-import RetroClash.Utils (countTo, oneHot, nextIdx, roundRobin)
+import RetroClash.Utils (countFromTo, oneHot, nextIdx, roundRobin)
 import RetroClash.Clock
 
 data SevenSegment n dom = SevenSegment
@@ -49,7 +49,7 @@ bytesSS div bytes = (shownDigit, segments)
   where
     digit = regEn (0 :: Index (n * 2)) timer $ nextIdx <$> digit
       where
-        counter = countTo 0 div
+        counter = countFromTo 0 div (pure True)
         timer = counter .==. pure 0
 
     shownDigit = oneHot <$> digit

@@ -23,7 +23,7 @@ type Milliseconds (ms :: Nat) = Microseconds (1_000 * ms)
 type Microseconds (us :: Nat) = Nanoseconds (1_000 * us)
 type Nanoseconds (ns :: Nat) = 1_000 * ns
 
-type ClockDivider dom n = n `Div` DomainPeriod dom
+type ClockDivider dom ps = ps `Div` DomainPeriod dom
 
 risePeriod
     :: forall ps dom. (HiddenClockResetEnable dom, _)

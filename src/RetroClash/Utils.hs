@@ -8,6 +8,8 @@ module RetroClash.Utils
 
     , (.==)
     , (==.)
+    , (./=)
+    , (/=.)
 
     , unchanged
     , debounce
@@ -15,15 +17,15 @@ module RetroClash.Utils
     , oneHot
     , roundRobin
 
-    , countTo
+    , countFromTo
     , nextIdx, prevIdx
     , succIdx, predIdx
     , moreIdx, lessIdx
-    , shiftInFromLeft
 
     , mealyState
     , mealyStateB
-    -- , mealyStateSlow
+
+    -- , enable
     ) where
 
 import Clash.Prelude
@@ -87,10 +89,18 @@ infix 4 .==
 (.==) :: (Eq a, Applicative f) => f a -> a -> f Bool
 fx .== y = fx .==. pure y
 
-countTo :: (Eq a, Enum a, NFDataX a, HiddenClockResetEnable dom) => a -> a -> Signal dom a
-countTo start target = counter
+infix 4 /=.
+(/=.) :: (Eq a, Applicative f) => a -> f a -> f Bool
+x /=. fy = pure x ./=. fy
+
+infix 4 ./=
+(./=) :: (Eq a, Applicative f) => f a -> a -> f Bool
+fx ./= y = fx ./=. pure y
+
+countFromTo :: (Eq a, Enum a, NFDataX a, HiddenClockResetEnable dom) => a -> a -> Signal dom Bool -> Signal dom a
+countFromTo from to tick = counter
   where
-    counter = register start $ mux (counter .==. pure target) (pure start) (succ <$> counter)
+    counter = regEn from tick $ mux (counter .==. pure to) (pure from) (succ <$> counter)
 
 nextIdx :: (Eq a, Enum a, Bounded a) => a -> a
 nextIdx = fromMaybe minBound . succIdx
@@ -115,7 +125,7 @@ predIdx x | x == minBound = Nothing
 mealyState
    :: (HiddenClockResetEnable dom, NFDataX s)
    => (i -> State s o) -> s -> (Signal dom i -> Signal dom o)
-mealyState f s0 x = mealy step s0 x
+mealyState f = mealy step
   where
     step s x = let (y, s') = runState (f x) s in (s', y)
 
@@ -124,16 +134,5 @@ mealyStateB
     => (i -> State s o) -> s -> (Unbundled dom i -> Unbundled dom o)
 mealyStateB f s0 = unbundle . mealyState f s0 . bundle
 
--- mealyStateSlow
---     :: (HiddenClockResetEnable dom, NFDataX s)
---     => Signal dom Bool
---     -> (i -> State s o)
---     -> s
---     -> (Signal dom i -> Signal dom o)
--- mealyStateSlow tick f s0 x = mealy step s0 (bundle (tick, x))
---   where
---     step s (tick, x) = let (y, s') = runState (f x) s
---                        in (if tick then s' else s, y)
-
-shiftInFromLeft :: (BitPack a, KnownNat (BitSize a)) => Bit -> a -> (a, Bit)
-shiftInFromLeft b bs = bitCoerce (b, bs)
+-- enable :: (KnownDomain dom) => Signal dom Bool -> Signal dom a -> Signal dom (Maybe a)
+-- enable en x = mux en (Just <$> x) (pure Nothing)
