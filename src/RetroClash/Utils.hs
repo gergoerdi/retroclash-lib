@@ -11,6 +11,10 @@ module RetroClash.Utils
     , (./=)
     , (/=.)
 
+    , (.!!.)
+    , (.!!)
+    , (!!.)
+
     , unchanged
     , debounce
 
@@ -25,7 +29,7 @@ module RetroClash.Utils
     , mealyState
     , mealyStateB
 
-    -- , enable
+    , enable
     ) where
 
 import Clash.Prelude
@@ -82,20 +86,29 @@ fromActiveLow :: Bit -> Bool
 fromActiveLow = fromActiveHigh . complement
 
 infix 4 ==.
-(==.) :: (Eq a, Applicative f) => a -> f a -> f Bool
-x ==. fy = pure x .==. fy
+(==.) :: (Eq a, Functor f) => a -> f a -> f Bool
+x ==. fy = (x ==) <$> fy
 
 infix 4 .==
-(.==) :: (Eq a, Applicative f) => f a -> a -> f Bool
-fx .== y = fx .==. pure y
+(.==) :: (Eq a, Functor f) => f a -> a -> f Bool
+fx .== y = (== y) <$> fx
 
 infix 4 /=.
-(/=.) :: (Eq a, Applicative f) => a -> f a -> f Bool
-x /=. fy = pure x ./=. fy
+(/=.) :: (Eq a, Functor f) => a -> f a -> f Bool
+x /=. fy = (x /=) <$> fy
 
 infix 4 ./=
-(./=) :: (Eq a, Applicative f) => f a -> a -> f Bool
-fx ./= y = fx ./=. pure y
+(./=) :: (Eq a, Functor f) => f a -> a -> f Bool
+fx ./= y = (/= y) <$> fx
+
+(.!!.) :: (KnownNat n, Enum i, Applicative f) => f (Vec n a) -> f i -> f a
+(.!!.) = liftA2 (!!)
+
+(!!.) :: (KnownNat n, Enum i, Functor f) => Vec n a -> f i -> f a
+xs !!. i = (xs !!) <$> i
+
+(.!!) :: (KnownNat n, Enum i, Functor f) => f (Vec n a) -> i -> f a
+xs .!! i = (!! i) <$> xs
 
 countFromTo :: (Eq a, Enum a, NFDataX a, HiddenClockResetEnable dom) => a -> a -> Signal dom Bool -> Signal dom a
 countFromTo from to tick = counter
@@ -134,5 +147,5 @@ mealyStateB
     => (i -> State s o) -> s -> (Unbundled dom i -> Unbundled dom o)
 mealyStateB f s0 = unbundle . mealyState f s0 . bundle
 
--- enable :: (KnownDomain dom) => Signal dom Bool -> Signal dom a -> Signal dom (Maybe a)
--- enable en x = mux en (Just <$> x) (pure Nothing)
+enable :: (Applicative f) => f Bool -> f a -> f (Maybe a)
+enable en x = mux en (Just <$> x) (pure Nothing)
