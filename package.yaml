@@ -1,0 +1,23 @@
+name: retroclash-lib
+version: 0.0.0
+category: acme
+
+dependencies:
+  - base
+  - clash-prelude
+  - clash-lib
+  - clash-ghc
+
+source-dirs:
+  - src
+
+library:
+  exposed-modules:
+    - RetroClash.Utils
+    - RetroClash.Clock
+    - RetroClash.Keypad
+    - RetroClash.SevenSegment
+    - RetroClash.Slow
+    - RetroClash.SerialRx
+    - RetroClash.SerialTx
+
