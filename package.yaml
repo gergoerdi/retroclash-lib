@@ -11,6 +11,8 @@ dependencies:
   - ghc-typelits-extra
   - ghc-typelits-knownnat
 
+  - mtl
+  - transformers
 
 source-dirs:
   - src
