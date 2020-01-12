@@ -23,6 +23,19 @@ ghc-options:
   -fplugin GHC.TypeLits.Normalise
   -fplugin GHC.TypeLits.Extra.Solver
 
+default-extensions:
+  - NoImplicitPrelude
+  - FlexibleContexts
+  - ScopedTypeVariables
+  - DataKinds
+  - NoStarIsType
+  - KindSignatures
+  - TypeOperators
+  - TypeApplications
+  - TypeFamilies
+  - DeriveGeneric
+  - DeriveAnyClass
+
 library:
   exposed-modules:
     - RetroClash.Utils
