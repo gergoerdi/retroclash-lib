@@ -45,4 +45,5 @@ library:
     - RetroClash.Slow
     - RetroClash.SerialRx
     - RetroClash.SerialTx
+    - RetroClash.VGA
 
