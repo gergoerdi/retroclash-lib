@@ -3,8 +3,7 @@ module RetroClash.Utils
     ( withResetEnableGen
     , withEnableGen
 
-    , activeLow, activeHigh
-    , fromActiveLow, fromActiveHigh
+    , Polarity(..), Active, active, IsActive(..)
 
     , (.==)
     , (==.)
@@ -73,17 +72,25 @@ roundRobin next = (selector, i)
     i = regEn (0 :: Index n) next $ nextIdx <$> i
     selector = bitCoerce . oneHot <$> i
 
-activeHigh :: Bool -> Bit
-activeHigh = boolToBit
+data Polarity = High | Low
 
-activeLow :: Bool -> Bit
-activeLow = complement . activeHigh
+newtype Active (p :: Polarity) = MkActive{ activeLevel :: Bit }
+    deriving (Show, Eq, Ord, Generic, NFDataX, BitPack)
 
-fromActiveHigh :: Bit -> Bool
-fromActiveHigh = bitToBool
+active :: Bit -> Active p
+active = MkActive
 
-fromActiveLow :: Bit -> Bool
-fromActiveLow = fromActiveHigh . complement
+class IsActive p where
+    fromActive :: Active p -> Bool
+    toActive :: Bool -> Active p
+
+instance IsActive High where
+    fromActive = bitToBool . activeLevel
+    toActive = MkActive . boolToBit
+
+instance IsActive Low where
+    fromActive = bitToBool . complement . activeLevel
+    toActive = MkActive . complement . boolToBit
 
 infix 4 ==.
 (==.) :: (Eq a, Functor f) => a -> f a -> f Bool
