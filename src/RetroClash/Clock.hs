@@ -14,9 +14,9 @@ module RetroClash.Clock
     ) where
 
 import Clash.Prelude
-import GHC.Natural
+import GHC.TypeNats
 
-type HzToPeriod (rate :: Nat) = Seconds 1 `Div` rate
+type HzToPeriod (rate :: Nat) = (Seconds 1 + rate - 1) `Div` rate
 
 type Seconds (s :: Nat) = Milliseconds (1_000 * s)
 type Milliseconds (ms :: Nat) = Microseconds (1_000 * ms)
