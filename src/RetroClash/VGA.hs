@@ -8,6 +8,9 @@ module RetroClash.VGA
     , vgaDriver
     , VGATiming(..), VGATimings(..)
     , vga640x480at60
+    , vga800x600at60
+    , vga800x600at72
+    , vga1024x768at60
     ) where
 
 import RetroClash.Clock
@@ -98,4 +101,25 @@ vga640x480at60 :: VGATimings (HzToPeriod 25_175_000) 640 480
 vga640x480at60 = VGATimings
     { vgaHorizTiming = VGATiming Low (SNat @16) (SNat @96) (SNat @48)
     , vgaVertTiming  = VGATiming Low (SNat @11) (SNat @2)  (SNat @31)
+    }
+
+-- | VGA 800x600@72Hz, 50 MHz pixel clock
+vga800x600at72 :: VGATimings (HzToPeriod 50_000_000) 800 600
+vga800x600at72 = VGATimings
+    { vgaHorizTiming = VGATiming High (SNat @56) (SNat @120) (SNat @64)
+    , vgaVertTiming  = VGATiming High (SNat @37) (SNat @6)   (SNat @23)
+    }
+
+-- | VGA 800x600@60Hz, 40 MHz pixel clock
+vga800x600at60 :: VGATimings (HzToPeriod 40_000_000) 800 600
+vga800x600at60 = VGATimings
+    { vgaHorizTiming = VGATiming High (SNat @40) (SNat @128) (SNat @88)
+    , vgaVertTiming  = VGATiming High (SNat @1)  (SNat @4)   (SNat @23)
+    }
+
+-- | VGA 1024*768@60Hz, 65 MHz pixel clock
+vga1024x768at60 :: VGATimings (HzToPeriod 65_000_000) 1024 768
+vga1024x768at60 = VGATimings
+    { vgaHorizTiming = VGATiming Low (SNat @24) (SNat @136) (SNat @160)
+    , vgaVertTiming  = VGATiming Low (SNat @3)  (SNat @6)   (SNat @29)
     }
