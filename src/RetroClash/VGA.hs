@@ -10,12 +10,11 @@ module RetroClash.VGA
     , vgaOut
     , vgaPort
     , VGATiming(..), VGATimings(..)
+
     , vga640x480at60
     , vga800x600at60
     , vga800x600at72
     , vga1024x768at60
-
-    , vgaCounter
     ) where
 
 import Clash.Prelude
@@ -23,28 +22,42 @@ import RetroClash.Clock
 import RetroClash.Utils
 import Data.Maybe (isJust)
 
-data VGAOut dom r g b = VGAOut
+data VGASync dom = VGASync
     { vgaHSync :: Signal dom Bit
     , vgaVSync :: Signal dom Bit
+    , vgaDE :: Signal dom Bool
+    }
+
+data VGAOut dom r g b = VGAOut
+    { vgaSync  :: VGASync dom
     , vgaR     :: Signal dom (Unsigned r)
     , vgaG     :: Signal dom (Unsigned g)
     , vgaB     :: Signal dom (Unsigned b)
     }
 
+data VGADriver dom w h = VGADriver
+    { vgaSync :: VGASync dom
+    , vgaX :: Signal dom (Maybe (Index w))
+    , vgaY :: Signal dom (Maybe (Index h))
+    }
+
 vgaPort :: PortName
 vgaPort = PortProduct "VGA"
-    [ PortName "HSYNC"
-    , PortName "VSYNC"
+    [ PortProduct ""
+      [ PortName "HSYNC"
+      , PortName "VSYNC"
+      , PortName "DE"
+      ]
     , PortName "RED"
     , PortName "GREEN"
     , PortName "BLUE"
     ]
 
-data VGATiming (visible :: Nat) = forall pre pulseWidth post. VGATiming
+data VGATiming (visible :: Nat) = forall front pulse back. VGATiming
     { polarity :: Polarity
-    , preWidth :: SNat pre
-    , pulseWidth :: SNat pulseWidth
-    , postWidth :: SNat post
+    , preWidth :: SNat front
+    , pulseWidth :: SNat pulse
+    , postWidth :: SNat back
     }
 deriving instance Show (VGATiming vis)
 
@@ -53,20 +66,6 @@ data VGATimings (ps :: Nat) (w :: Nat) (h :: Nat) = VGATimings
     , vgaVertTiming :: VGATiming h
     }
     deriving (Show)
-
-data VGASync dom = VGASync
-    { vgaHSync :: Signal dom Bit
-    , vgaVSync :: Signal dom Bit
-    , vgaDE :: Signal dom Bool
-    }
-
-data VGADriver dom w h = VGADriver
-    { vgaSync :: VGASync dom
-    , vgaX :: Signal dom (Maybe (Index w))
-    , vgaY :: Signal dom (Maybe (Index h))
-    , vgaEndFrame :: Signal dom Bool
-    , vgaEndLine :: Signal dom Bool
-    }
 
 data VGAState visible front pulse back
     = Visible (Index visible)
@@ -87,19 +86,16 @@ end :: (KnownNat back) => VGAState visible front pulse back -> Bool
 end (BackPorch cnt) | cnt == maxBound = True
 end _ = False
 
-vgaCounter
-    :: (HiddenClockResetEnable dom, KnownNat visible)
-    => VGATiming visible
-    -> Signal dom Bool
-    -> (Signal dom (Maybe (Index visible)), Signal dom Bit, Signal dom Bool)
-vgaCounter (VGATiming pol preWidth@SNat pulseWidth@SNat postWidth@SNat) tick =
-    (visible <$> state, toActiveDyn pol . sync <$> state, end <$> state)
-  where
-    state = regEn (Visible 0) tick $ next <$> state
+data VGACounter visible
+    = forall front pulse back. (KnownNat front, KnownNat pulse, KnownNat back)
+    => VGACounter (VGAState visible front pulse back -> VGAState visible front pulse back)
 
-    next (Visible cnt) = maybe (FrontPorch $ the preWidth 0) Visible $ succIdx cnt
-    next (FrontPorch cnt) = maybe (SyncPulse $ the pulseWidth 0) FrontPorch $ succIdx cnt
-    next (SyncPulse cnt) = maybe (BackPorch $ the postWidth 0) SyncPulse $ succIdx cnt
+vgaCounter :: (KnownNat visible) => VGATiming visible -> VGACounter visible
+vgaCounter (VGATiming _ front@SNat pulse@SNat back@SNat) = VGACounter next
+  where
+    next (Visible cnt) = maybe (FrontPorch $ the front 0) Visible $ succIdx cnt
+    next (FrontPorch cnt) = maybe (SyncPulse $ the pulse 0) FrontPorch $ succIdx cnt
+    next (SyncPulse cnt) = maybe (BackPorch $ the back 0) SyncPulse $ succIdx cnt
     next (BackPorch cnt) = maybe (Visible 0) BackPorch $ succIdx cnt
 
     the :: SNat n -> Index n -> Index n
@@ -110,19 +106,28 @@ vgaDriver
     => (DomainPeriod dom ~ ps)
     => VGATimings ps w h
     -> VGADriver dom w h
-vgaDriver VGATimings{..} = VGADriver{ vgaSync = VGASync{..}, ..}
-  where
-    (vgaX, vgaHSync, vgaEndLine) = vgaCounter vgaHorizTiming (pure True)
-    (vgaY, vgaVSync, endFrame) = vgaCounter vgaVertTiming vgaEndLine
-    vgaEndFrame = vgaEndLine .&&. endFrame
-    vgaDE = isJust <$> vgaX .&&. isJust <$> vgaY
+vgaDriver VGATimings{..} = case (vgaCounter vgaHorizTiming, vgaCounter vgaVertTiming) of
+    (VGACounter nextH, VGACounter nextV) -> VGADriver{ vgaSync = VGASync{..}, .. }
+      where
+        stateH = register (Visible 0) $ nextH <$> stateH
+        stateV = regEn (Visible 0) endLine $ nextV <$> stateV
+
+        vgaX = visible <$> stateH
+        vgaHSync = toActiveDyn (polarity vgaHorizTiming) . sync <$> stateH
+        endLine = end <$> stateH
+
+        vgaY = visible <$> stateV
+        vgaVSync = toActiveDyn (polarity vgaVertTiming) . sync <$> stateV
+
+        vgaDE = isJust <$> vgaX .&&. isJust <$> vgaY
+
 
 vgaOut
     :: (HiddenClockResetEnable dom, KnownNat r, KnownNat g, KnownNat b)
     => VGASync dom
     -> Signal dom (Unsigned r, Unsigned g, Unsigned b)
     -> VGAOut dom r g b
-vgaOut VGASync{..} rgb = VGAOut{..}
+vgaOut vgaSync@VGASync{..} rgb = VGAOut{..}
   where
     (r, g, b) = unbundle rgb
     vgaR = blank r
