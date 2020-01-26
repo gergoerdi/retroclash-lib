@@ -6,18 +6,19 @@ module RetroClash.SevenSegment
     , showSSs
     , muxRR
     , driveSS
+    , sevenSegmentPort
     -- , bytesSS
     ) where
 
 import Clash.Prelude
 import qualified Data.List as L
-import RetroClash.Utils (countFromTo, oneHot, nextIdx, roundRobin)
+import RetroClash.Utils
 import RetroClash.Clock
 
-data SevenSegment n dom = SevenSegment
-    { anodes :: Signal dom (Vec n Bool)
-    , segments :: Signal dom (Vec 7 Bool)
-    , dp :: Signal dom Bool
+data SevenSegment dom n anodes segments dp = SevenSegment
+    { anodes :: Signal dom (Vec n (Active anodes))
+    , segments :: Signal dom (Vec 7 (Active segments))
+    , dp :: Signal dom (Active dp)
     }
 
 muxRR
@@ -34,11 +35,18 @@ driveSS
     :: (KnownNat n, HiddenClockResetEnable dom, _)
     => (a -> (Vec 7 Bool, Bool))
     -> Signal dom (Vec n (Maybe a))
-    -> SevenSegment n dom
-driveSS draw digits = SevenSegment{..}
+    -> SevenSegment dom n anodes segments dp
+driveSS draw digits = SevenSegment
+    { anodes = map toActive <$> anodes
+    , segments = map toActive <$> segments
+    , dp = toActive <$> dp
+    }
   where
     (anodes, digit) = muxRR (risePeriod (SNat @(Milliseconds 1))) digits
     (segments, dp) = unbundle $ maybe (repeat False, False) draw <$> digit
+
+sevenSegmentPort :: PortName
+sevenSegmentPort = PortProduct "SS" $ PortName <$> ["AN", "SEG", "DP"]
 
 bytesSS
     :: forall n div dom clk sync. (KnownNat n, KnownNat div, HiddenClockResetEnable dom)
