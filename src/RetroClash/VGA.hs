@@ -41,16 +41,17 @@ data VGADriver dom w h = VGADriver
     , vgaY :: Signal dom (Maybe (Index h))
     }
 
+-- The weird prefix names used here are due to https://github.com/clash-lang/clash-compiler/issues/1041
 vgaPort :: PortName
-vgaPort = PortProduct "VGA"
-    [ PortProduct ""
+vgaPort = PortProduct ""
+    [ PortProduct "VGA"
       [ PortName "HSYNC"
       , PortName "VSYNC"
       , PortName "DE"
       ]
-    , PortName "RED"
-    , PortName "GREEN"
-    , PortName "BLUE"
+    , PortName "VGA_RED"
+    , PortName "VGA_GREEN"
+    , PortName "VGA_BLUE"
     ]
 
 data VGATiming (visible :: Nat) = forall front pulse back. VGATiming
