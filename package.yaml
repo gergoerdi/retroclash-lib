@@ -1,6 +1,6 @@
 name: retroclash-lib
 version: 0.0.0
-category: acme
+category: hardware
 
 dependencies:
   - base
