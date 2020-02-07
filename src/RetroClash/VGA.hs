@@ -21,6 +21,7 @@ import Clash.Prelude
 import RetroClash.Clock
 import RetroClash.Utils
 import Data.Maybe (isJust)
+import Data.Word
 
 data VGASync dom = VGASync
     { vgaHSync :: Signal dom Bit
@@ -28,11 +29,11 @@ data VGASync dom = VGASync
     , vgaDE :: Signal dom Bool
     }
 
-data VGAOut dom r g b = VGAOut
+data VGAOut dom (r :: Nat) (g :: Nat) (b :: Nat) = VGAOut
     { vgaSync  :: VGASync dom
-    , vgaR     :: Signal dom (Unsigned r)
-    , vgaG     :: Signal dom (Unsigned g)
-    , vgaB     :: Signal dom (Unsigned b)
+    , vgaR     :: Signal dom Word8
+    , vgaG     :: Signal dom Word8
+    , vgaB     :: Signal dom Word8
     }
 
 data VGADriver dom w h = VGADriver
@@ -126,7 +127,7 @@ vgaDriver VGATimings{..} = case (vgaCounter vgaHorizTiming, vgaCounter vgaVertTi
 vgaOut
     :: (HiddenClockResetEnable dom, KnownNat r, KnownNat g, KnownNat b)
     => VGASync dom
-    -> Signal dom (Unsigned r, Unsigned g, Unsigned b)
+    -> Signal dom (Word8, Word8, Word8)
     -> VGAOut dom r g b
 vgaOut vgaSync@VGASync{..} rgb = VGAOut{..}
   where
@@ -135,7 +136,7 @@ vgaOut vgaSync@VGASync{..} rgb = VGAOut{..}
     vgaG = blank g
     vgaB = blank b
 
-    blank :: (KnownNat n) => _ (Unsigned n) -> _ (Unsigned n)
+    -- blank :: (KnownNat n) => _ (Unsigned n) -> _ (Unsigned n)
     blank = mux (not <$> vgaDE) 0
 
 -- | VGA 640*480@60Hz, 25.175 MHz pixel clock
