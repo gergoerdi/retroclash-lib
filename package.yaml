@@ -46,4 +46,5 @@ library:
     - RetroClash.SerialRx
     - RetroClash.SerialTx
     - RetroClash.VGA
+    - RetroClash.Video
 
