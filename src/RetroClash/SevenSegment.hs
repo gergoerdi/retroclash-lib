@@ -1,4 +1,5 @@
 {-# LANGUAGE PartialTypeSignatures, RecordWildCards #-}
+{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module RetroClash.SevenSegment
     ( SevenSegment(..)
     , encodeHexSS
