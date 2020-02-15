@@ -10,42 +10,42 @@ import RetroClash.Utils
 import Data.Maybe
 
 maskStart
-    :: forall k n dom. (KnownNat n, KnownNat k, 1 <= n)
+    :: forall k n dom. (KnownNat n, KnownNat k)
     => (HiddenClockResetEnable dom)
-    => Signal dom (Maybe (Index (n + k)))
+    => Signal dom (Maybe (Index (k + n)))
     -> Signal dom (Maybe (Index n))
-maskStart = maskSides (SNat @k) (SNat @0)
+maskStart = maskSides (SNat @k)
 
 maskEnd
-    :: forall k n dom. (KnownNat n, KnownNat k, 1 <= n)
+    :: forall k n dom. (KnownNat n, KnownNat k)
     => (HiddenClockResetEnable dom)
     => Signal dom (Maybe (Index (n + k)))
     -> Signal dom (Maybe (Index n))
-maskEnd = maskSides (SNat @0) (SNat @k)
+maskEnd = maskSides (SNat @0)
 
 center
-    :: forall k n m dom. (KnownNat n, KnownNat k, 1 <= k, n ~ (k + 2 * m), KnownNat m)
+    :: forall n n0 k m dom. (KnownNat n, KnownNat n0, KnownNat k, KnownNat m)
+    => (k ~ ((n0 - n) `Div` 2), n0 ~ (k + n + m))
     => (HiddenClockResetEnable dom)
-    => Signal dom (Maybe (Index n))
-    -> Signal dom (Maybe (Index k))
-center = maskSides (SNat @m) (SNat @m)
+    => Signal dom (Maybe (Index n0))
+    -> Signal dom (Maybe (Index n))
+center = maskSides (SNat @k)
 
 maskSides
-    :: (KnownNat n, KnownNat m, KnownNat k, 1 <= k)
+    :: (KnownNat n, KnownNat m, KnownNat k)
     => (HiddenClockResetEnable dom)
-    => SNat n
-    -> SNat m
-    -> Signal dom (Maybe (Index (n + k + m)))
-    -> Signal dom (Maybe (Index k))
-maskSides start end raw = translated
+    => SNat k
+    -> Signal dom (Maybe (Index (k + n + m)))
+    -> Signal dom (Maybe (Index n))
+maskSides k raw = transformed
   where
     changed = register Nothing raw ./=. raw
-    started = raw .== Just (snatToNum start)
+    started = raw .== Just (snatToNum k)
 
-    r = register Nothing translated
-    translated =
-        mux (isNothing <$> raw) (pure Nothing) $
+    r = register Nothing transformed
+    transformed =
         mux (not <$> changed) r $
+        mux (isNothing <$> raw) (pure Nothing) $
         mux started (pure $ Just 0) $
         (succIdx =<<) <$> r
 
@@ -55,17 +55,16 @@ scale
     => SNat k
     -> Signal dom (Maybe (Index n))
     -> Signal dom (Maybe (Index (n `Div` k)))
-scale k raw = scaled
+scale k raw = scaled'
   where
     changed = register Nothing raw ./=. raw
-    cnt = register (0 :: Index k) $
-        mux (isNothing <$> raw) (pure 0) $
-        mux (not <$> changed) cnt $
-        nextIdx <$> cnt
 
-    r = register Nothing scaled
-    scaled =
-        mux (isNothing <$> raw) (pure Nothing) $
-        mux (not <$> changed) r $
-        mux (cnt .== 0) (maybe (Just 0) succIdx <$> r) $
-        r
+    counter = regEn (0 :: Index k) changed $
+        mux (isNothing <$> raw) (pure 0) $
+        nextIdx <$> counter
+
+    scaled = register Nothing scaled'
+    scaled' =
+        mux (not <$> changed) scaled $
+        mux (counter .== 0) (maybe (Just 0) succIdx <$> scaled) $
+        scaled
