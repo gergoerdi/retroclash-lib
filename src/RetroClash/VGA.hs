@@ -130,13 +130,9 @@ vgaOut
     -> VGAOut dom r g b
 vgaOut vgaSync@VGASync{..} rgb = VGAOut{..}
   where
-    (r, g, b) = unbundle rgb
-    vgaR = blank r
-    vgaG = blank g
-    vgaB = blank b
+    (vgaR, vgaG, vgaB) = unbundle $ blank rgb
 
-    blank :: (KnownNat n) => _ (Unsigned n) -> _ (Unsigned n)
-    blank = mux (not <$> vgaDE) 0
+    blank = mux (not <$> vgaDE) (pure (0, 0, 0))
 
 -- | VGA 640*480@60Hz, 25.175 MHz pixel clock
 vga640x480at60 :: VGATimings (HzToPeriod 25_175_000) 640 480
