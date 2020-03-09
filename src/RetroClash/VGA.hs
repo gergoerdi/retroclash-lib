@@ -8,7 +8,6 @@ module RetroClash.VGA
     , vgaDriver
     , VGAOut(..)
     , vgaOut
-    , vgaPort
     , VGATiming(..), VGATimings(..)
 
     , vga640x480at60
@@ -40,19 +39,6 @@ data VGADriver dom w h = VGADriver
     , vgaX :: Signal dom (Maybe (Index w))
     , vgaY :: Signal dom (Maybe (Index h))
     }
-
--- The weird prefix names used here are due to https://github.com/clash-lang/clash-compiler/issues/1041
-vgaPort :: PortName
-vgaPort = PortProduct ""
-    [ PortProduct "VGA"
-      [ PortName "HSYNC"
-      , PortName "VSYNC"
-      , PortName "DE"
-      ]
-    , PortName "VGA_RED"
-    , PortName "VGA_GREEN"
-    , PortName "VGA_BLUE"
-    ]
 
 data VGATiming (visible :: Nat) = forall front pulse back. VGATiming
     { polarity :: Polarity
