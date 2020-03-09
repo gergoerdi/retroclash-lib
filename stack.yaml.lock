@@ -5,54 +5,40 @@
 
 packages:
 - completed:
-    hackage: clash-ghc-1.0.0@sha256:b586b601147a9271990a03a54a9edebb043543d34df4dcf161373e7e7195e7a8,7744
+    hackage: clash-ghc-1.2.0@sha256:6411d5f73ce26dd5d90dfb54a27aaba44e04c3002f6db9524e41f2f3f1488a44,7991
     pantry-tree:
-      size: 3026
-      sha256: 6fa2f1fd0957baceafbb3b826a603cc0b7894a6bf0e691da008e0053cc6f275c
+      size: 2587
+      sha256: 184c0751df03f193be77661e7c00f16cb5a062cddbdafa797fc37d48e691810a
   original:
-    hackage: clash-ghc-1.0.0
+    hackage: clash-ghc-1.2.0
 - completed:
-    hackage: clash-prelude-1.0.0@sha256:0c2ba743a2411ef3fda63c39985982d529f4176e057a04848820e73a0665fa50,12916
+    hackage: clash-prelude-1.2.0@sha256:534c9b29e2242351fc60d11e357660a8de4c77aa5926d6dcf6bb10ea84a55a84,14724
     pantry-tree:
-      size: 9159
-      sha256: 70c036ae25bb95d9d189afc835d969f91ba0d4a8ab055bd9e737f00c4a572899
+      size: 10202
+      sha256: 979a387e0b9f901f7e1c8e279ce7a055a826c016a4f4c9cc9ac9a54a68622f23
   original:
-    hackage: clash-prelude-1.0.0
+    hackage: clash-prelude-1.2.0
 - completed:
-    hackage: clash-lib-1.0.0@sha256:10e219e941b229810e66d1ed9dd8d37b45cc7908348788f8b7e0e843bf3952a4,8704
+    hackage: clash-lib-1.2.0@sha256:ce2c46a60dbdedafa26bcccc8304db0edbccd57d003cbc8a1769db06053eaa28,10664
     pantry-tree:
-      size: 14995
-      sha256: 60bffb591ff5523585dcd699edd835688bbcab39354a3ddff77038dc3153497b
+      size: 16035
+      sha256: 92738c47247bb72b351ae7b3302438c1854eca19fd4247a9ab6c47f114044ab7
   original:
-    hackage: clash-lib-1.0.0
+    hackage: clash-lib-1.2.0
 - completed:
-    hackage: ghc-typelits-extra-0.3.1@sha256:06180adc1a5ed1d5f136a8afbf54c8b69da4efee527dc07e531909ac43afc5b6,4759
+    hackage: concurrent-supply-0.1.7@sha256:b812fbe0f87d73d49853403ccce399ced7c5600b847b0bf264b3723426e43e97,1643
     pantry-tree:
-      size: 681
-      sha256: 717a1015666db281d0f20e8eea8ac81ac4e2599db3dcc1af0a7026e16a872f46
+      size: 400
+      sha256: cf6a8f888fa48c2c6d6c63badf884703a053a559b85cefff6b74e35f5a0102bb
   original:
-    hackage: ghc-typelits-extra-0.3.1
+    hackage: concurrent-supply-0.1.7
 - completed:
-    hackage: type-errors-0.2.0.0@sha256:b8f97a0cf72f4fcdc9bfd02d753f84e65e5e5d165d53f82947a95cdcbd7f2945,2082
+    hackage: shake-0.18.2@sha256:0d6a5df63fe1a5c0a6d75ee86e36306cce8306f790ac8c1f791d65757ff62101,14806
     pantry-tree:
-      size: 368
-      sha256: 0ca254a77a52915d71ce1dc3927caa1b8166dec162932a65314c2bc2af296200
+      size: 11991
+      sha256: c65170e2f7c3369dbd487a7ab7e1a3542dbc943f05eacca12950001e3414ebfb
   original:
-    hackage: type-errors-0.2.0.0
-- completed:
-    hackage: first-class-families-0.5.0.0@sha256:6e1488c502d5b1e780739a53edab65a307c6bf94d4232fab70e696e87f0fa087,1290
-    pantry-tree:
-      size: 847
-      sha256: 9289ea3bef39f4aae774cfe466810ee55989b1ef58de33a7c9668df8b0657b1d
-  original:
-    hackage: first-class-families-0.5.0.0
-- completed:
-    hackage: higgledy-0.3.0.0@sha256:d1127f5f4b37c894d0bed093b642949d839840dbe1c289ce3f336e6273105c4b,1472
-    pantry-tree:
-      size: 607
-      sha256: 0960534fe4aff1aa0467d15ab686f8e56be763f1cf4b83d4032e360fc1d4492b
-  original:
-    hackage: higgledy-0.3.0.0
+    hackage: shake-0.18.2
 - completed:
     hackage: shake-0.17.9@sha256:d4e663075c595fa1592b943ecd67b3140a23c54730b6c1efe1b00559d244626a,14795
     pantry-tree:
@@ -76,7 +62,7 @@ packages:
     hackage: higgledy-0.3.0.0
 snapshots:
 - completed:
-    size: 500539
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/13/28.yaml
-    sha256: cdde1bfb38fdee21c6acb73d506e78f7e12e0a73892adbbbe56374ebef4d3adf
-  original: lts-13.28
+    size: 491372
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/15/2.yaml
+    sha256: a98d091d911606d0d8adccbeb811b81bbd8cc2d888f99ef9e273350e8e9692a8
+  original: lts-15.2
