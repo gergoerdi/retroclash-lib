@@ -17,9 +17,9 @@ import RetroClash.Utils
 import RetroClash.Clock
 
 data SevenSegment dom n anodes segments dp = SevenSegment
-    { anodes :: Signal dom (Vec n (Active anodes))
-    , segments :: Signal dom (Vec 7 (Active segments))
-    , dp :: Signal dom (Active dp)
+    { anodes :: "AN" ::: Signal dom (Vec n (Active anodes))
+    , segments :: "SEG" ::: Signal dom (Vec 7 (Active segments))
+    , dp :: "DP" ::: Signal dom (Active dp)
     }
 
 muxRR
