@@ -5,6 +5,7 @@
 
 packages:
 - completed:
+<<<<<<< HEAD
     hackage: clash-ghc-1.2.0@sha256:6411d5f73ce26dd5d90dfb54a27aaba44e04c3002f6db9524e41f2f3f1488a44,7991
     pantry-tree:
       size: 2587
@@ -32,6 +33,62 @@ packages:
       sha256: cf6a8f888fa48c2c6d6c63badf884703a053a559b85cefff6b74e35f5a0102bb
   original:
     hackage: concurrent-supply-0.1.7
+=======
+    size: 1355225
+    subdir: clash-ghc
+    url: https://github.com/gergoerdi/clash-compiler/archive/2b3e5c94b9a9f395366847cf46e5c8557da8071d.tar.gz
+    cabal-file:
+      size: 7991
+      sha256: f5d9a088375617959f4791b3e4d662516f4626ec75c0bee3793b4d04b0534f6c
+    name: clash-ghc
+    version: 1.3.0
+    sha256: 27dd2ef67a0d7b573824719ed5367570cc02e82cd89389ed3185fd912fd9e018
+    pantry-tree:
+      size: 2685
+      sha256: c94dd55784b4c44dbcccd1a70a503fefb6f9e61deb4f8a78d3e94365d08ba988
+  original:
+    subdir: clash-ghc
+    url: https://github.com/gergoerdi/clash-compiler/archive/2b3e5c94b9a9f395366847cf46e5c8557da8071d.tar.gz
+- completed:
+    size: 1355225
+    subdir: clash-prelude
+    url: https://github.com/gergoerdi/clash-compiler/archive/2b3e5c94b9a9f395366847cf46e5c8557da8071d.tar.gz
+    cabal-file:
+      size: 15253
+      sha256: cdd05763f933b85030fb329d31ad2112032f84030713b5e5e93b8dd0c0b90b13
+    name: clash-prelude
+    version: 1.3.0
+    sha256: 27dd2ef67a0d7b573824719ed5367570cc02e82cd89389ed3185fd912fd9e018
+    pantry-tree:
+      size: 12800
+      sha256: f9a4a832d32847671cee9a135609864ab48511666b971199490d1d523ba2c3ed
+  original:
+    subdir: clash-prelude
+    url: https://github.com/gergoerdi/clash-compiler/archive/2b3e5c94b9a9f395366847cf46e5c8557da8071d.tar.gz
+- completed:
+    size: 1355225
+    subdir: clash-lib
+    url: https://github.com/gergoerdi/clash-compiler/archive/2b3e5c94b9a9f395366847cf46e5c8557da8071d.tar.gz
+    cabal-file:
+      size: 10719
+      sha256: b381ce673e6fdd8507192bc066651dbe870960865f0c8b7390c9fa46a4fd46c6
+    name: clash-lib
+    version: 1.3.0
+    sha256: 27dd2ef67a0d7b573824719ed5367570cc02e82cd89389ed3185fd912fd9e018
+    pantry-tree:
+      size: 16287
+      sha256: b419906018282c44eb6060a1a01655fb7881a958dca7bb4ec3b00356834dba94
+  original:
+    subdir: clash-lib
+    url: https://github.com/gergoerdi/clash-compiler/archive/2b3e5c94b9a9f395366847cf46e5c8557da8071d.tar.gz
+- completed:
+    hackage: concurrent-supply-0.1.8@sha256:9373f4868ad28936a7b93781b214ef4afdeacf377ef4ac729583073491c9f9fb,1627
+    pantry-tree:
+      size: 400
+      sha256: bdfaa167ae3249f858ba248aea2e9b97ab9b13af6e68c73b7c3192e717e11b83
+  original:
+    hackage: concurrent-supply-0.1.8
+>>>>>>> 98c0188... Upgrade to Clash HEAD
 - completed:
     hackage: shake-0.18.2@sha256:0d6a5df63fe1a5c0a6d75ee86e36306cce8306f790ac8c1f791d65757ff62101,14806
     pantry-tree:
@@ -39,6 +96,7 @@ packages:
       sha256: c65170e2f7c3369dbd487a7ab7e1a3542dbc943f05eacca12950001e3414ebfb
   original:
     hackage: shake-0.18.2
+<<<<<<< HEAD
 - completed:
     hackage: shake-0.17.9@sha256:d4e663075c595fa1592b943ecd67b3140a23c54730b6c1efe1b00559d244626a,14795
     pantry-tree:
@@ -46,6 +104,8 @@ packages:
       sha256: ffab22e1e490fb8d0cf9638222a8871ad72ce3cc96d5543660def65c09947a61
   original:
     hackage: shake-0.17.9
+=======
+>>>>>>> 98c0188... Upgrade to Clash HEAD
 - completed:
     hackage: mustache-2.3.0@sha256:71bd62cf7bcfb8ab900aa0fd110c0de55fa476aeac6c8365b0339705f62c75b7,3049
     pantry-tree:

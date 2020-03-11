@@ -12,6 +12,7 @@ module RetroClash.SevenSegment
     ) where
 
 import Clash.Prelude
+import Clash.Class.HasDomain
 import qualified Data.List as L
 import RetroClash.Utils
 import RetroClash.Clock
@@ -21,6 +22,7 @@ data SevenSegment dom n anodes segments dp = SevenSegment
     , segments :: "SEG" ::: Signal dom (Vec 7 (Active segments))
     , dp :: "DP" ::: Signal dom (Active dp)
     }
+type instance TryDomain t (SevenSegment dom n anodes segments dp) = Found dom
 
 muxRR
     :: (KnownNat n, HiddenClockResetEnable dom)

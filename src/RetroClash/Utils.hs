@@ -35,18 +35,19 @@ module RetroClash.Utils
     ) where
 
 import Clash.Prelude
+import Clash.Class.HasDomain
 import Data.Maybe (fromMaybe)
 import Control.Monad.State
 import RetroClash.Clock
 
 withResetEnableGen
-    :: (KnownDomain dom)
+    :: (KnownDomain dom, WithSingleDomain dom r)
     => (HiddenClockResetEnable dom => r)
     -> Clock dom -> r
 withResetEnableGen board clk = withClockResetEnable clk resetGen enableGen board
 
 withEnableGen
-    :: (KnownDomain dom)
+    :: (KnownDomain dom, WithSingleDomain dom r)
     => (HiddenClockResetEnable dom => r)
     -> Clock dom -> Reset dom -> r
 withEnableGen board clk rst = withClockResetEnable clk rst enableGen board

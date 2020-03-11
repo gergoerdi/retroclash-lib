@@ -17,6 +17,7 @@ module RetroClash.VGA
     ) where
 
 import Clash.Prelude
+import Clash.Class.HasDomain
 import RetroClash.Clock
 import RetroClash.Utils
 import Data.Maybe (isJust)
@@ -26,6 +27,7 @@ data VGASync dom = VGASync
     , vgaVSync :: "VSYNC" ::: Signal dom Bit
     , vgaDE :: "DE" ::: Signal dom Bool
     }
+type instance TryDomain t (VGASync dom) = Found dom
 
 data VGAOut dom r g b = VGAOut
     { vgaSync  :: VGASync dom
@@ -33,6 +35,7 @@ data VGAOut dom r g b = VGAOut
     , vgaG     :: "GREEN" ::: Signal dom (Unsigned g)
     , vgaB     :: "BLUE" ::: Signal dom (Unsigned b)
     }
+type instance TryDomain t (VGAOut dom r g b) = Found dom
 
 data VGADriver dom w h = VGADriver
     { vgaSync :: VGASync dom
