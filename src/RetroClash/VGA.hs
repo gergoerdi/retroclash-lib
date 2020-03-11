@@ -23,16 +23,16 @@ import RetroClash.Utils
 import Data.Maybe (isJust)
 
 data VGASync dom = VGASync
-    { vgaHSync :: Signal dom Bit
-    , vgaVSync :: Signal dom Bit
-    , vgaDE :: Signal dom Bool
+    { vgaHSync :: "HSYNC" ::: Signal dom Bit
+    , vgaVSync :: "VSYNC" ::: Signal dom Bit
+    , vgaDE :: "DE" ::: Signal dom Bool
     }
 
 data VGAOut dom r g b = VGAOut
     { vgaSync  :: VGASync dom
-    , vgaR     :: Signal dom (Unsigned r)
-    , vgaG     :: Signal dom (Unsigned g)
-    , vgaB     :: Signal dom (Unsigned b)
+    , vgaR     :: "RED" ::: Signal dom (Unsigned r)
+    , vgaG     :: "GREEN" ::: Signal dom (Unsigned g)
+    , vgaB     :: "BLUE" ::: Signal dom (Unsigned b)
     }
 
 data VGADriver dom w h = VGADriver
