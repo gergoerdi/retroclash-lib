@@ -55,7 +55,7 @@ scale
     => SNat k
     -> Signal dom (Maybe (Index n))
     -> Signal dom (Maybe (Index (n `Div` k)))
-scale k raw = scaled'
+scale k raw = scaledNext
   where
     changed = register Nothing raw ./=. raw
 
@@ -63,8 +63,8 @@ scale k raw = scaled'
         mux (isNothing <$> raw) (pure 0) $
         nextIdx <$> counter
 
-    scaled = register Nothing scaled'
-    scaled' =
+    scaled = register Nothing scaledNext
+    scaledNext =
         mux (not <$> changed) scaled $
         mux (counter .== 0) (maybe (Just 0) succIdx <$> scaled) $
         scaled

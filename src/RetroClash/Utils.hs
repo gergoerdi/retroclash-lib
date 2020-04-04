@@ -62,9 +62,9 @@ debounce
     => SNat ps -> a -> Signal dom a -> Signal dom a
 debounce SNat start this = regEn start stable this
   where
-    counter = register (0 :: Index (ClockDivider dom ps)) counter'
-    counter' = mux (unchanged start this) (moreIdx <$> counter) 0
-    stable = counter' .==. pure maxBound
+    counter = register (0 :: Index (ClockDivider dom ps)) counterNext
+    counterNext = mux (unchanged start this) (moreIdx <$> counter) 0
+    stable = counterNext .==. pure maxBound
 
 roundRobin
     :: forall n dom a. (KnownNat n, HiddenClockResetEnable dom)
