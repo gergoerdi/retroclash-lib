@@ -60,10 +60,10 @@ unchanged x0 x = x .==. register x0 x
 debounce
     :: forall ps a dom. (Eq a, NFDataX a, HiddenClockResetEnable dom, KnownNat (ClockDivider dom ps))
     => SNat ps -> a -> Signal dom a -> Signal dom a
-debounce _ init this = regEn init stable this
+debounce SNat start this = regEn start stable this
   where
     counter = register (0 :: Index (ClockDivider dom ps)) counter'
-    counter' = mux (unchanged init this) (moreIdx <$> counter) 0
+    counter' = mux (unchanged start this) (moreIdx <$> counter) 0
     stable = counter' .==. pure maxBound
 
 roundRobin
