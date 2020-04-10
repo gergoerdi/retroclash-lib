@@ -1,7 +1,10 @@
 {-# LANGUAGE ScopedTypeVariables, ApplicativeDo, Rank2Types #-}
+{-# LANGUAGE TupleSections #-}
 module RetroClash.Utils
     ( withResetEnableGen
     , withEnableGen
+
+    , withStart
 
     , Polarity(..), Active, active, IsActive(..)
     , toActiveDyn
@@ -32,6 +35,7 @@ module RetroClash.Utils
     , mealyStateB
 
     , enable
+    , packWrite
     ) where
 
 import Clash.Prelude
@@ -176,3 +180,9 @@ mealyStateB f s0 = unbundle . mealyState f s0 . bundle
 
 enable :: (Applicative f) => f Bool -> f a -> f (Maybe a)
 enable en x = mux en (Just <$> x) (pure Nothing)
+
+packWrite :: addr -> Maybe val -> Maybe (addr, val)
+packWrite addr val = (addr,) <$> val
+
+withStart :: (HiddenClockResetEnable dom) => a -> Signal dom a -> Signal dom a
+withStart x0 = mux (register True $ pure False) (pure x0)
