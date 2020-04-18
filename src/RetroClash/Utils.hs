@@ -21,6 +21,7 @@ module RetroClash.Utils
     , (!!.)
 
     , unchanged
+    , integrate
     , debounce
 
     , oneHot
@@ -60,6 +61,13 @@ oneHot = bitCoerce . bit @(Unsigned n) . fromIntegral
 
 unchanged :: (HiddenClockResetEnable dom, Eq a, NFDataX a) => a -> Signal dom a -> Signal dom Bool
 unchanged x0 x = x .==. register x0 x
+
+integrate
+    :: (Monoid a, NFDataX a, HiddenClockResetEnable dom)
+    => Signal dom Bool -> Signal dom a -> Signal dom a
+integrate clear x = acc
+  where
+    acc = register mempty $ mux clear x $ mappend <$> acc <*> x
 
 debounce
     :: forall ps a dom. (Eq a, NFDataX a, HiddenClockResetEnable dom, KnownNat (ClockDivider dom ps))
