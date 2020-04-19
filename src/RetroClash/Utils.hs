@@ -57,7 +57,7 @@ withEnableGen
 withEnableGen board clk rst = withClockResetEnable clk rst enableGen board
 
 oneHot :: forall n. (KnownNat n) => Index n -> Vec n Bool
-oneHot = bitCoerce . bit @(Unsigned n) . fromIntegral
+oneHot = reverse . bitCoerce . bit @(Unsigned n) . fromIntegral
 
 unchanged :: (HiddenClockResetEnable dom, Eq a, NFDataX a) => a -> Signal dom a -> Signal dom Bool
 unchanged x0 x = x .==. register x0 x
@@ -85,7 +85,7 @@ roundRobin
 roundRobin next = (selector, i)
   where
     i = regEn (0 :: Index n) next $ nextIdx <$> i
-    selector = bitCoerce . oneHot <$> i
+    selector = oneHot <$> i
 
 data Polarity = High | Low
     deriving (Show, Eq)
