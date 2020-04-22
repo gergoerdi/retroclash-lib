@@ -14,6 +14,7 @@ dependencies:
   - mtl
   - transformers
   - barbies
+  - lens
 
 source-dirs:
   - src
@@ -64,4 +65,5 @@ library:
     - RetroClash.SerialTx
     - RetroClash.VGA
     - RetroClash.Video
+    - RetroClash.CPU
 
