@@ -1,2 +1,4 @@
 resolver: clash-HEAD.yaml
 
+extra-deps:
+  - barbies-2.0.1.0
