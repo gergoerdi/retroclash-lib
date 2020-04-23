@@ -24,17 +24,33 @@ ghc-options:
   -fplugin GHC.TypeLits.Extra.Solver
 
 default-extensions:
-  - NoImplicitPrelude
-  - FlexibleContexts
-  - ScopedTypeVariables
+  - BinaryLiterals
+  - ConstraintKinds
   - DataKinds
-  - NoStarIsType
+  - DeriveAnyClass
+  - DeriveGeneric
+  - DeriveLift
+  - DerivingStrategies
+  - ExplicitForAll
+  - ExplicitNamespaces
+  - FlexibleContexts
+  - FlexibleInstances
   - KindSignatures
-  - TypeOperators
+  - MagicHash
+  - MonoLocalBinds
+  - NoImplicitPrelude
+  - NoMonomorphismRestriction
+  - NoStarIsType
+  - NoStrictData
+  - NoStrict
+  - QuasiQuotes
+  - ScopedTypeVariables
+  - TemplateHaskellQuotes
+  - TemplateHaskell
   - TypeApplications
   - TypeFamilies
-  - DeriveGeneric
-  - DeriveAnyClass
+  - TypeInType
+  - TypeOperators
 
 library:
   exposed-modules:
