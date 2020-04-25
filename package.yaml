@@ -58,6 +58,7 @@ library:
   exposed-modules:
     - RetroClash.Utils
     - RetroClash.Clock
+    - RetroClash.Barbies
     - RetroClash.Keypad
     - RetroClash.SevenSegment
     - RetroClash.Slow

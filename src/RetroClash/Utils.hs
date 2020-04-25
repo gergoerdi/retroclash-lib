@@ -38,9 +38,6 @@ module RetroClash.Utils
     , enable
     , muxA
     , packWrite
-
-    , bbundle
-    , bunbundle
     ) where
 
 import Clash.Prelude
@@ -206,9 +203,3 @@ muxA = F.foldr (liftA2 (<|>)) (pure empty)
 
 withStart :: (HiddenClockResetEnable dom) => a -> Signal dom a -> Signal dom a
 withStart x0 = mux (register True $ pure False) (pure x0)
-
-bbundle :: (Applicative f, BareB b, TraversableB (b Covered)) => b Covered f -> f (b Bare Identity)
-bbundle = fmap bstrip . bsequence'
-
-bunbundle :: (Functor f, BareB b, DistributiveB (b Covered)) => f (b Bare Identity) -> b Covered f
-bunbundle = bdistribute' . fmap bcover
