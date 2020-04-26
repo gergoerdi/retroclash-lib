@@ -36,13 +36,15 @@ module RetroClash.Utils
     , mealyStateB
 
     , enable
+    , muxA
     , packWrite
     ) where
 
 import Clash.Prelude
+import RetroClash.Clock
 import Data.Maybe (fromMaybe)
 import Control.Monad.State
-import RetroClash.Clock
+import qualified Data.Foldable as F
 
 withResetEnableGen
     :: (KnownDomain dom)
@@ -191,6 +193,9 @@ enable en x = mux en (Just <$> x) (pure Nothing)
 
 packWrite :: addr -> Maybe val -> Maybe (addr, val)
 packWrite addr val = (addr,) <$> val
+
+muxA :: (Foldable t, Alternative m, Applicative f) => t (f (m a)) -> f (m a)
+muxA = F.foldr (liftA2 (<|>)) (pure empty)
 
 withStart :: (HiddenClockResetEnable dom) => a -> Signal dom a -> Signal dom a
 withStart x0 = mux (register True $ pure False) (pure x0)
