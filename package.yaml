@@ -14,6 +14,7 @@ dependencies:
   - mtl
   - transformers
   - barbies
+  - barbies-th
   - lens
 
 source-dirs:

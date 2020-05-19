@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, NumericUnderscores, PartialTypeSignatures #-}
+{-# LANGUAGE NumericUnderscores, PartialTypeSignatures #-}
 {-# LANGUAGE DuplicateRecordFields, RecordWildCards, ApplicativeDo #-}
 {-# LANGUAGE ExistentialQuantification, StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
@@ -21,21 +21,28 @@ import RetroClash.Clock
 import RetroClash.Utils
 import Data.Maybe (isJust)
 
-data VGASync dom = VGASync
-    { vgaHSync :: "HSYNC" ::: Signal dom Bit
-    , vgaVSync :: "VSYNC" ::: Signal dom Bit
-    , vgaDE :: "DE" ::: Signal dom Bool
-    }
+import RetroClash.Barbies
+import Barbies
+import Barbies.Bare
+import Data.Barbie.TH
+
+declareBareB [d|
+  data VGASync = VGASync
+      { vgaHSync :: "HSYNC" ::: Bit
+      , vgaVSync :: "VSYNC" ::: Bit
+      , vgaDE :: "DE" ::: Bool
+      } |]
+instance NFDataX (Pure VGASync)
 
 data VGAOut dom r g b = VGAOut
-    { vgaSync  :: VGASync dom
+    { vgaSync  :: Signals dom VGASync
     , vgaR     :: "RED" ::: Signal dom (Unsigned r)
     , vgaG     :: "GREEN" ::: Signal dom (Unsigned g)
     , vgaB     :: "BLUE" ::: Signal dom (Unsigned b)
     }
 
 data VGADriver dom w h = VGADriver
-    { vgaSync :: VGASync dom
+    { vgaSync :: Signals dom VGASync
     , vgaX :: Signal dom (Maybe (Index w))
     , vgaY :: Signal dom (Maybe (Index h))
     }
@@ -111,7 +118,7 @@ vgaDriver VGATimings{..} = case (vgaCounter vgaHorizTiming, vgaCounter vgaVertTi
 
 vgaOut
     :: (HiddenClockResetEnable dom, KnownNat r, KnownNat g, KnownNat b)
-    => VGASync dom
+    => Signals dom VGASync
     -> Signal dom (Unsigned r, Unsigned g, Unsigned b)
     -> VGAOut dom r g b
 vgaOut vgaSync@VGASync{..} rgb = VGAOut{..}

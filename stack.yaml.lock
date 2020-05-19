@@ -64,6 +64,17 @@ packages:
       sha256: 154ccf6bf8816db6838d2b689ea821d818288a81b92b01e10c936536699f2e61
   original:
     hackage: barbies-2.0.1.0
+- completed:
+    size: 5067
+    url: https://github.com/gergoerdi/barbies-th/archive/af2335de760b02ad6dcaff1db29c1055b5202c1d.tar.gz
+    name: barbies-th
+    version: 0.1.2
+    sha256: d8b189fd3f441c729b24d41923166410915ac6551189aa20c9af7fb5c3a9dd81
+    pantry-tree:
+      size: 540
+      sha256: cb163937b74de29d31f79bf15f534f83774e8681bbc9e726f9f9ce3e57120a60
+  original:
+    url: https://github.com/gergoerdi/barbies-th/archive/af2335de760b02ad6dcaff1db29c1055b5202c1d.tar.gz
 snapshots:
 - completed:
     size: 492027
