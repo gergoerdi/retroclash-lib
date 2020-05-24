@@ -1,11 +1,12 @@
 {-# LANGUAGE NumericUnderscores, PartialTypeSignatures #-}
 {-# LANGUAGE DuplicateRecordFields, RecordWildCards, ApplicativeDo #-}
-{-# LANGUAGE ExistentialQuantification, StandaloneDeriving #-}
+{-# LANGUAGE ExistentialQuantification, StandaloneDeriving, TypeSynonymInstances #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module RetroClash.VGA
     ( VGASync(..)
     , VGADriver(..)
     , vgaDriver
+    , RGB(..)
     , VGAOut(..)
     , vgaOut
     , VGATiming(..), VGATimings(..)
@@ -30,21 +31,26 @@ declareBareB [d|
   data VGASync = VGASync
       { vgaHSync :: "HSYNC" ::: Bit
       , vgaVSync :: "VSYNC" ::: Bit
-      , vgaDE :: "DE" ::: Bool
+      , vgaDE    :: "DE"    ::: Bool
       } |]
 instance NFDataX (Pure VGASync)
 
-data VGAOut dom r g b = VGAOut
-    { vgaSync  :: Signals dom VGASync
-    , vgaR     :: "RED" ::: Signal dom (Unsigned r)
-    , vgaG     :: "GREEN" ::: Signal dom (Unsigned g)
-    , vgaB     :: "BLUE" ::: Signal dom (Unsigned b)
+data RGB r g b = RGB
+    { vgaR :: "RED"   ::: Unsigned r
+    , vgaG :: "GREEN" ::: Unsigned g
+    , vgaB :: "BLUE"  ::: Unsigned b
+    }
+    deriving (Generic, NFDataX, BitPack)
+
+data VGAOut dom rgb = VGAOut
+    { vgaSync :: Signal dom (Pure VGASync)
+    , vgaRGB  :: Signal dom rgb
     }
 
 data VGADriver dom w h = VGADriver
-    { vgaSync :: Signals dom VGASync
-    , vgaX :: Signal dom (Maybe (Index w))
-    , vgaY :: Signal dom (Maybe (Index h))
+    { vgaSync :: Signal dom (Pure VGASync)
+    , vgaX    :: Signal dom (Maybe (Index w))
+    , vgaY    :: Signal dom (Maybe (Index h))
     }
 
 data VGATiming (visible :: Nat) = forall front pulse back. VGATiming
@@ -101,7 +107,7 @@ vgaDriver
     => VGATimings ps w h
     -> VGADriver dom w h
 vgaDriver VGATimings{..} = case (vgaCounter vgaHorizTiming, vgaCounter vgaVertTiming) of
-    (VGACounter nextH, VGACounter nextV) -> VGADriver{ vgaSync = VGASync{..}, .. }
+    (VGACounter nextH, VGACounter nextV) -> VGADriver{ vgaSync = bbundle VGASync{..}, .. }
       where
         stateH = register (Visible 0) $ nextH <$> stateH
         stateV = regEn (Visible 0) endLine $ nextV <$> stateV
@@ -118,14 +124,14 @@ vgaDriver VGATimings{..} = case (vgaCounter vgaHorizTiming, vgaCounter vgaVertTi
 
 vgaOut
     :: (HiddenClockResetEnable dom, KnownNat r, KnownNat g, KnownNat b)
-    => Signals dom VGASync
-    -> Signal dom (Unsigned r, Unsigned g, Unsigned b)
-    -> VGAOut dom r g b
-vgaOut vgaSync@VGASync{..} rgb = VGAOut{..}
+    => Signal dom (Pure VGASync)
+    -> Signal dom (RGB r g b)
+    -> VGAOut dom (RGB r g b)
+vgaOut vgaSync rgb = VGAOut{..}
   where
-    (vgaR, vgaG, vgaB) = unbundle $ blank rgb
+    vgaRGB = blank rgb
 
-    blank = mux (not <$> vgaDE) (pure (0, 0, 0))
+    blank = mux (not . vgaDE <$> vgaSync) (pure (RGB 0 0 0))
 
 -- | VGA 640*480@60Hz, 25.175 MHz pixel clock
 vga640x480at60 :: VGATimings (HzToPeriod 25_175_000) 640 480
