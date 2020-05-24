@@ -1,6 +1,2 @@
-resolver: clash-1.2.yaml
+resolver: clash-HEAD.yaml
 
-extra-deps:
-  - shake-0.17.9
-  - mustache-2.3.0
-  - higgledy-0.3.0.0
