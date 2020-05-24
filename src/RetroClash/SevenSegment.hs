@@ -1,4 +1,4 @@
-{-# LANGUAGE PartialTypeSignatures, RecordWildCards #-}
+{-# LANGUAGE PartialTypeSignatures, RecordWildCards, ApplicativeDo #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module RetroClash.SevenSegment
     ( SevenSegment(..)
@@ -16,11 +16,12 @@ import qualified Data.List as L
 import RetroClash.Utils
 import RetroClash.Clock
 
-data SevenSegment dom n anodes segments dp = SevenSegment
-    { anodes :: "AN" ::: Signal dom (Vec n (Active anodes))
-    , segments :: "SEG" ::: Signal dom (Vec 7 (Active segments))
-    , dp :: "DP" ::: Signal dom (Active dp)
+data SevenSegment n anodes segments dp = SevenSegment
+    { anodes :: "AN" ::: Vec n (Active anodes)
+    , segments :: "SEG" ::: Vec 7 (Active segments)
+    , dp :: "DP" ::: Active dp
     }
+    deriving (Generic)
 
 muxRR
     :: (KnownNat n, HiddenClockResetEnable dom)
@@ -36,12 +37,12 @@ driveSS
     :: (KnownNat n, HiddenClockResetEnable dom, _)
     => (a -> (Vec 7 Bool, Bool))
     -> Signal dom (Vec n (Maybe a))
-    -> SevenSegment dom n anodes segments dp
-driveSS draw digits = SevenSegment
-    { anodes = map toActive <$> anodes
-    , segments = map toActive <$> segments
-    , dp = toActive <$> dp
-    }
+    -> Signal dom (SevenSegment n anodes segments dp)
+driveSS draw digits = do
+    anodes <- map toActive <$> anodes
+    segments <- map toActive <$> segments
+    dp <- toActive <$> dp
+    pure SevenSegment{..}
   where
     (anodes, digit) = muxRR (risePeriod (SNat @(Milliseconds 1))) digits
     (segments, dp) = unbundle $ maybe (repeat False, False) draw <$> digit
