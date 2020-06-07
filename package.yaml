@@ -67,4 +67,5 @@ library:
     - RetroClash.VGA
     - RetroClash.Video
     - RetroClash.CPU
+    - RetroClash.Delayed
 
