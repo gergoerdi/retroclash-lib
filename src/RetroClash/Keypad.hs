@@ -56,14 +56,15 @@ pressedKeys = zipWith (zipWith decode)
     decode mapping (Just Pressed) = Just mapping
     decode _ _ = Nothing
 
-firstJust2D :: Matrix rows cols (Maybe a) -> Maybe a
-firstJust2D = foldl (foldl mplus) Nothing
+firstJust2D :: (KnownNat rows, KnownNat cols) => Matrix (rows + 1) (cols + 1) (Maybe a) -> Maybe a
+firstJust2D = fold mplus . map (fold mplus)
 
 inputKeypad
-    :: (KnownNat rows, KnownNat cols, IsActive rowAct, IsActive colAct, HiddenClockResetEnable dom, KnownNat (ClockDivider dom (Milliseconds 5)))
-    => Matrix rows cols a
-    -> Signal dom (Vec rows (Active rowAct))
-    -> (Signal dom (Vec cols (Active colAct)), Signal dom (Maybe a))
+    :: (KnownNat rows, KnownNat cols, IsActive rowAct, IsActive colAct)
+    => (HiddenClockResetEnable dom, KnownNat (ClockDivider dom (Milliseconds 5)))
+    => Matrix (rows + 1) (cols + 1) a
+    -> Signal dom (Vec (rows + 1) (Active rowAct))
+    -> (Signal dom (Vec (cols + 1) (Active colAct)), Signal dom (Maybe a))
 inputKeypad keymap rows = (cols, pressedKey)
   where
     (cols, keyState) = scanKeypad rows
