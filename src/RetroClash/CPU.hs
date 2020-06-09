@@ -15,6 +15,7 @@ import Control.Lens (Setter', scribe, iso)
 import Barbies
 import Barbies.Bare
 
+infix 4 .:=
 (.:=) :: (Applicative f, MonadWriter (Barbie b f) m) => Setter' (b f) (f a) -> a -> m ()
 fd .:= x = scribe (iso getBarbie Barbie . fd) (pure x)
 
