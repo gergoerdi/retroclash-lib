@@ -1,6 +1,8 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, RankNTypes #-}
 module RetroClash.Delayed
     ( delayVGA
+    , delayedRom
+    , delayedRam
     , delayedBlockRam1
     , matchDelay
     )
@@ -31,6 +33,21 @@ matchDelay
     -> Signal dom a
 matchDelay d x0 x = toSignal $ d *> delayI x0 (fromSignal x)
 
+delayedRam
+    :: (HiddenClockResetEnable dom)
+    => (forall dom'. (HiddenClockResetEnable dom') => Signal dom' addr -> Signal dom' wr -> Signal dom' a)
+    -> DSignal dom d addr
+    -> DSignal dom d wr
+    -> DSignal dom (d + 1) a
+delayedRam syncRam addr write = unsafeFromSignal $ syncRam (toSignal addr) (toSignal write)
+
+delayedRom
+    :: (HiddenClockResetEnable dom)
+    => (forall dom'. (HiddenClockResetEnable dom') => Signal dom' addr -> Signal dom' a)
+    -> DSignal dom d addr
+    -> DSignal dom (d + 1) a
+delayedRom syncRom addr = unsafeFromSignal $ syncRom (toSignal addr)
+
 delayedBlockRam1
     :: (1 <= n, Enum addr, NFDataX a, HiddenClockResetEnable dom)
     => ResetStrategy r
@@ -39,5 +56,4 @@ delayedBlockRam1
     -> DSignal dom d addr
     -> DSignal dom d (Maybe (addr, a))
     -> DSignal dom (d + 1) a
-delayedBlockRam1 resetStrat size content addr wr = unsafeFromSignal $
-    blockRam1 resetStrat size content (toSignal addr) (toSignal wr)
+delayedBlockRam1 resetStrat size content = delayedRam (blockRam1 resetStrat size content)
