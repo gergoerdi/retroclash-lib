@@ -4,12 +4,17 @@ module RetroClash.Delayed
     , delayedRom
     , delayedRam
     , delayedBlockRam1
+
+    , delayedRegister
+    , isRisingD
+    , changedD
     , matchDelay
     )
     where
 
 import Clash.Prelude
 import RetroClash.VGA
+import Data.Function (fix)
 
 delayVGA
     :: (KnownNat d, KnownNat r, KnownNat g, KnownNat b)
@@ -57,3 +62,20 @@ delayedBlockRam1
     -> DSignal dom d (Maybe (addr, a))
     -> DSignal dom (d + 1) a
 delayedBlockRam1 resetStrat size content = delayedRam (blockRam1 resetStrat size content)
+
+delayedRegister
+    :: (NFDataX a, HiddenClockResetEnable dom)
+    => a
+    -> (DSignal dom d a -> DSignal dom d a)
+    -> DSignal dom (d + 1) a
+delayedRegister initial feedback = fix $ unsafeFromSignal . register initial . toSignal . feedback . antiDelay d1
+
+isRisingD
+    :: (HiddenClockResetEnable dom, NFDataX a, Bounded a, Eq a)
+    => a -> DSignal dom d a -> DSignal dom d Bool
+isRisingD initial = unsafeFromSignal . isRising initial . toSignal
+
+changedD
+    :: (HiddenClockResetEnable dom, NFDataX a, Eq a)
+    => a -> DSignal dom d a -> DSignal dom d Bool
+changedD initial x = x ./=. (unsafeFromSignal . register initial . toSignal $ x)
