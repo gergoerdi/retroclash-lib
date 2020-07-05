@@ -50,11 +50,11 @@ maskSides k raw = transformed
         (succIdx =<<) <$> r
 
 scale
-    :: forall k n m dom. (KnownNat n, KnownNat k, 1 <= k, 1 <= (n `Div` k))
+    :: forall n k dom. (KnownNat n, KnownNat k, 1 <= k)
     => (HiddenClockResetEnable dom)
     => SNat k
+    -> Signal dom (Maybe (Index (n * k)))
     -> Signal dom (Maybe (Index n))
-    -> Signal dom (Maybe (Index (n `Div` k)))
 scale k raw = scaledNext
   where
     changed = register Nothing raw ./=. raw
