@@ -22,7 +22,7 @@ module RetroClash.Utils
     , (.!!)
     , (!!.)
 
-    , unchanged
+    , changed
     , integrate
     , debounce
 
@@ -67,8 +67,8 @@ withEnableGen board clk rst = withClockResetEnable clk rst enableGen board
 oneHot :: forall n. (KnownNat n) => Index n -> Vec n Bool
 oneHot = reverse . bitCoerce . bit @(Unsigned n) . fromIntegral
 
-unchanged :: (HiddenClockResetEnable dom, Eq a, NFDataX a) => a -> Signal dom a -> Signal dom Bool
-unchanged x0 x = x .==. register x0 x
+changed :: (HiddenClockResetEnable dom, Eq a, NFDataX a) => a -> Signal dom a -> Signal dom Bool
+changed x0 x = x ./=. register x0 x
 
 integrate
     :: (Monoid a, NFDataX a, HiddenClockResetEnable dom)
@@ -83,7 +83,7 @@ debounce
 debounce SNat start this = regEn start stable this
   where
     counter = register (0 :: Index (ClockDivider dom ps)) counterNext
-    counterNext = mux (unchanged start this) (moreIdx <$> counter) 0
+    counterNext = mux (changed start this) 0 (moreIdx <$> counter)
     stable = counterNext .==. pure maxBound
 
 roundRobin
