@@ -6,8 +6,7 @@ module RetroClash.Delayed
     , delayedBlockRam1
 
     , delayedRegister
-    , isRisingD
-    , changedD
+    , liftD
     , matchDelay
     )
     where
@@ -68,14 +67,20 @@ delayedRegister
     => a
     -> (DSignal dom d a -> DSignal dom d a)
     -> DSignal dom (d + 1) a
-delayedRegister initial feedback = fix $ unsafeFromSignal . register initial . toSignal . feedback . antiDelay d1
+delayedRegister initial feedback = r
+  where
+    r = unsafeFromSignal $ register initial $ toSignal new
+    old = antiDelay (SNat @1) r
+    new = feedback old
 
-isRisingD
-    :: (HiddenClockResetEnable dom, NFDataX a, Bounded a, Eq a)
-    => a -> DSignal dom d a -> DSignal dom d Bool
-isRisingD initial = unsafeFromSignal . isRising initial . toSignal
+liftD
+    :: (HiddenClockResetEnable dom)
+    => (forall dom'. (HiddenClockResetEnable dom') => Signal dom' a -> Signal dom' b)
+    -> DSignal dom d a -> DSignal dom d b
+liftD f = unsafeFromSignal . f . toSignal
 
-changedD
-    :: (HiddenClockResetEnable dom, NFDataX a, Eq a)
-    => a -> DSignal dom d a -> DSignal dom d Bool
-changedD initial x = x ./=. (unsafeFromSignal . register initial . toSignal $ x)
+liftD2
+    :: (HiddenClockResetEnable dom)
+    => (forall dom'. (HiddenClockResetEnable dom') => Signal dom' a -> Signal dom' b -> Signal dom' c)
+    -> DSignal dom d a -> DSignal dom d b -> DSignal dom d c
+liftD2 f x y = liftD (uncurry f . unbundle) $ liftA2 (,) x y
