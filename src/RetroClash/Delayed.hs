@@ -35,7 +35,10 @@ matchDelay
     -> a
     -> Signal dom a
     -> Signal dom a
-matchDelay d x0 x = toSignal $ d *> delayI x0 (fromSignal x)
+matchDelay ref x0 = toSignal . delayN (delayOf ref) x0 . fromSignal
+
+delayOf :: (KnownNat d) => DSignal dom d any -> SNat d
+delayOf _ = SNat
 
 delayedRam
     :: (HiddenClockResetEnable dom)
