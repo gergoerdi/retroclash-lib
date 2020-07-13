@@ -11,8 +11,8 @@ import RetroClash.Utils
 import RetroClash.Clock
 import RetroClash.Slow
 
-import Control.Monad.State
-import Control.Monad.Writer
+import Control.Monad.State.Strict
+import Control.Monad.Writer.Strict
 import Data.Monoid
 import Data.Foldable (for_)
 import Data.Word

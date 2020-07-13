@@ -45,7 +45,7 @@ module RetroClash.Utils
 import Clash.Prelude
 import RetroClash.Clock
 import Data.Maybe (fromMaybe)
-import Control.Monad.State
+import Control.Monad.State.Strict
 import qualified Data.Foldable as F
 import RetroClash.Clock
 import Barbies

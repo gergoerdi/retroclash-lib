@@ -8,8 +8,8 @@ import RetroClash.Barbies
 import Data.Monoid (Last(..))
 import Data.Functor.Identity
 
-import Control.Monad.Writer
-import Control.Monad.State
+import Control.Monad.Writer.Strict
+import Control.Monad.State.Strict
 import Control.Lens (Setter', scribe, iso)
 
 import Barbies
