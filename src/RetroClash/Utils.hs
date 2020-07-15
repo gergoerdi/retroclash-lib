@@ -9,6 +9,8 @@ module RetroClash.Utils
     , Polarity(..), Active, active, IsActive(..)
     , toActiveDyn
 
+    , bitwise
+
     , (.==)
     , (==.)
     , (./=)
@@ -213,3 +215,6 @@ muxA = F.foldr (liftA2 (<|>)) (pure empty)
 
 withStart :: (HiddenClockResetEnable dom) => a -> Signal dom a -> Signal dom a
 withStart x0 = mux (register True $ pure False) (pure x0)
+
+bitwise :: (BitPack a) => (BitVector (BitSize a) -> BitVector (BitSize a)) -> (a -> a)
+bitwise f = unpack . f . pack
