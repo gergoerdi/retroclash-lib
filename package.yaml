@@ -69,3 +69,4 @@ library:
     - RetroClash.CPU
     - RetroClash.Delayed
     - RetroClash.Stack
+    - RetroClash.BCD
