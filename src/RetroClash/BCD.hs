@@ -24,6 +24,7 @@ fromBCD = foldl (\x d -> x * 10 + fromIntegral d) 0
 type BCDSize n = CLog 10 (2 ^ n)
 type ShiftAdd n = (Vec (BCDSize n) (Unsigned 4), Unsigned n)
 
+{-# INLINE initBCD #-}
 initBCD :: (KnownNat n) => Unsigned n -> ShiftAdd n
 initBCD = shift . (,) (repeat 0)
 
@@ -38,6 +39,7 @@ add (digits, buf) = (map add3 digits, buf)
   where
     add3 d = if d >= 5 then d + 3 else d
 
+{-# INLINE toBCD #-}
 toBCD :: forall n. (KnownNat n, 1 <= n) => Unsigned n -> BCD (BCDSize n)
 toBCD = leToPlus @1 @n $
     map toDigit . fst . last . iterate (SNat @n) stepBCD . initBCD
