@@ -26,26 +26,25 @@ type ShiftAdd n = (Vec (BCDSize n) (Unsigned 4), Unsigned n)
 
 {-# INLINE initBCD #-}
 initBCD :: (KnownNat n) => Unsigned n -> ShiftAdd n
-initBCD = shift . (,) (repeat 0)
+initBCD = (,) (repeat 0)
 
 stepBCD :: (KnownNat n) => ShiftAdd n -> ShiftAdd n
 stepBCD = shift . add
-
-shift :: (KnownNat n) => ShiftAdd n -> ShiftAdd n
-shift = bitwise (`shiftL` 1)
-
-add :: ShiftAdd n -> ShiftAdd n
-add (digits, buf) = (map add3 digits, buf)
   where
-    add3 d = if d >= 5 then d + 3 else d
+    shift :: (KnownNat n) => ShiftAdd n -> ShiftAdd n
+    shift = bitwise (`shiftL` 1)
+
+    add :: ShiftAdd n -> ShiftAdd n
+    add (digits, buf) = (map add3 digits, buf)
+      where
+        add3 d = if d >= 5 then d + 3 else d
 
 {-# INLINE toBCD #-}
-toBCD :: forall n. (KnownNat n, 1 <= n) => Unsigned n -> BCD (BCDSize n)
-toBCD = leToPlus @1 @n $
-    map toDigit . fst . last . iterate (SNat @n) stepBCD . initBCD
+toBCD :: forall n. (KnownNat n) => Unsigned n -> BCD (BCDSize n)
+toBCD = map toDigit . fst . last . iterate (SNat @(n + 1)) stepBCD . initBCD
 
-roundtrip :: (KnownNat n, 1 <= n) => Unsigned n -> Unsigned n
+roundtrip :: (KnownNat n) => Unsigned n -> Unsigned n
 roundtrip = fromIntegral . fromBCD . map bitCoerce . toBCD
 
-prop_BCD :: (KnownNat n, 1 <= n) => Unsigned n -> Bool
+prop_BCD :: (KnownNat n) => Unsigned n -> Bool
 prop_BCD x = x == roundtrip x
