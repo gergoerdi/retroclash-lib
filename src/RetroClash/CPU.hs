@@ -19,6 +19,9 @@ infix 4 .:=
 (.:=) :: (Applicative f, MonadWriter (Barbie b f) m) => Setter' (b f) (f a) -> a -> m ()
 fd .:= x = scribe (iso getBarbie Barbie . fd) (pure x)
 
+assignOut :: (Applicative f, MonadWriter (Barbie b f) m) => Setter' (b f) (f a) -> a -> m ()
+assignOut fd x = fd .:= x
+
 update :: (BareB b, ApplicativeB (b Covered)) => Pure b -> Partial b -> Pure b
 update initials edits = bstrip $ bzipWith update1 (bcover initials) (getBarbie edits)
   where
