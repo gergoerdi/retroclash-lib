@@ -11,6 +11,9 @@ module RetroClash.Utils
 
     , bitwise
 
+    , bvShiftL
+    , bvShiftR
+
     , (.==)
     , (==.)
     , (./=)
@@ -233,3 +236,9 @@ withStart x0 = mux (register True $ pure False) (pure x0)
 
 bitwise :: (BitPack a) => (BitVector (BitSize a) -> BitVector (BitSize a)) -> (a -> a)
 bitwise f = unpack . f . pack
+
+bvShiftL :: forall n. (KnownNat n) => BitVector n -> Bit -> (Bit, BitVector n)
+bvShiftL xs x = bitCoerce $ xs ++# pack x
+
+bvShiftR :: forall n. (KnownNat n) => Bit -> BitVector n -> (BitVector n, Bit)
+bvShiftR x xs = bitCoerce $ pack x ++# xs
