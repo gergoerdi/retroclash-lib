@@ -70,3 +70,4 @@ library:
     - RetroClash.Delayed
     - RetroClash.Stack
     - RetroClash.BCD
+    - RetroClash.Port
