@@ -79,3 +79,4 @@ library:
     - RetroClash.Port
     - RetroClash.PS2
     - RetroClash.PS2.ASCII
+    - RetroClash.Memory
