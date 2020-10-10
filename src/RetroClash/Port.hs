@@ -1,6 +1,7 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase, ApplicativeDo #-}
 module RetroClash.Port
     ( PortCommand(..)
+    , portFromAddr
     , maskAddr
     , basedAt
     ) where
@@ -43,6 +44,15 @@ instance Bitraversable PortCommand where
     bitraverse f g = \case
         ReadPort port -> ReadPort <$> f port
         WritePort port val -> WritePort <$> f port <*> g val
+
+portFromAddr :: Signal dom (Maybe port) -> Signal dom (Maybe a) -> Signal dom (Maybe (PortCommand port a))
+portFromAddr addr w = do
+    addr <- addr
+    w <- w
+    pure $ case (addr, w) of
+        (Just addr, Nothing) -> Just $ ReadPort addr
+        (Just addr, Just w) -> Just $ WritePort addr w
+        _ -> Nothing
 
 maskAddr :: forall n k. (KnownNat n, KnownNat k) => Unsigned (n + k) -> Unsigned (n + k) -> Maybe (Unsigned k)
 maskAddr base0 addr = do
