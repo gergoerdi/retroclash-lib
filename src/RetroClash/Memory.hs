@@ -9,7 +9,7 @@ module RetroClash.Memory
     , (<||>)
     , mask
     , offset
-    , ram, rom, port
+    , readWrite, readOnly, port
     ) where
 
 import Clash.Prelude hiding (rom)
@@ -46,11 +46,12 @@ newtype Addressing dom addr dat a = Addressing
 memoryMap
     :: Signal dom (Maybe addr)
     -> Signal dom (Maybe dat)
-    -> Addressing dom addr dat out
-    -> (Signal dom (Maybe dat), out)
-memoryMap addr write spec = (getFirst <$> getFirstSignal result, output)
+    -> Addressing dom addr dat a
+    -> (Signal dom (Maybe dat), a)
+memoryMap addr write spec = (read, result)
   where
-    (output, result) = runWriter $ runReaderT (unAddressing spec) (addr, write)
+    (result, output) = runWriter $ runReaderT (unAddressing spec) (addr, write)
+    read = getFirst <$> getFirstSignal output
 
 memoryMap_
     :: Signal dom (Maybe addr)
@@ -61,7 +62,7 @@ memoryMap_ addr write spec = fst $ memoryMap addr write spec
 
 mapAddr
     :: (HiddenClockResetEnable dom)
-    => (addr -> Maybe addr') -> Addressing dom addr' dat r -> Addressing dom addr dat r
+    => (addr -> Maybe addr') -> Addressing dom addr' dat a -> Addressing dom addr dat a
 mapAddr f body = Addressing $ withReaderT (first $ fmap (f =<<)) $ do
     (addr, _) <- ask
     censor (FirstSignal . whenAddr addr . getFirstSignal) $ unAddressing body
@@ -71,50 +72,58 @@ mapAddr f body = Addressing $ withReaderT (first $ fmap (f =<<)) $ do
 infix 1 <||>
 (<||>)
     :: (HiddenClockResetEnable dom)
-    => Addressing dom addr1 dat r1
-    -> Addressing dom addr2 dat r2
-    -> Addressing dom (Either addr1 addr2) dat (r1, r2)
+    => Addressing dom addr1 dat a
+    -> Addressing dom addr2 dat b
+    -> Addressing dom (Either addr1 addr2) dat (a, b)
 body1 <||> body2 = do
     x <- mapAddr (either Just (const Nothing)) body1
     y <- mapAddr (either (const Nothing) Just) body2
     return (x, y)
 
-mask
-    :: (KnownNat k, KnownNat n)
-    => (HiddenClockResetEnable dom)
-    => Unsigned (n + k)
-    -> Addressing dom (Unsigned k)       dat r
-    -> Addressing dom (Unsigned (n + k)) dat r
-mask base = mapAddr (maskAddr base)
-
-offset
-    :: (Num addr, Ord addr)
-    => (HiddenClockResetEnable dom)
-    => addr
-    -> Addressing dom addr dat r
-    -> Addressing dom addr dat r
-offset base = mapAddr $ \addr -> do
-    guard $ base <= addr
-    return $ addr - base
-
-ram :: (Num addr) => RAM dom addr dat -> Addressing dom addr dat ()
-ram mkRam = Addressing $ do
+readWrite :: (Num addr) => RAM dom addr dat -> Addressing dom addr dat ()
+readWrite ram = Addressing $ do
     (addr, w) <- ask
-    let output = mkRam (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> w)
+    let output = ram (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> w)
     tell $ FirstSignal $ pure <$> output
 
-rom :: (Num addr) => ROM dom addr dat -> Addressing dom addr dat ()
-rom mkRom = Addressing $ do
+readOnly :: (Num addr) => ROM dom addr dat -> Addressing dom addr dat ()
+readOnly rom = Addressing $ do
     (addr, w) <- ask
-    let output = mkRom (fromMaybe 0 <$> addr)
+    let output = rom (fromMaybe 0 <$> addr)
     tell $ FirstSignal $ pure <$> output
 
 port
     :: (HiddenClockResetEnable dom, NFDataX dat)
-    => (Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), r))
-    -> Addressing dom addr dat r
+    => (Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a))
+    -> Addressing dom addr dat a
 port mkPort = Addressing $ do
     (addr, w) <- ask
     let (output, result) = mkPort $ portFromAddr addr w
     tell $ FirstSignal $ delay mempty $ First <$> output
     return result
+
+mask
+    :: (KnownNat k, KnownNat n)
+    => (HiddenClockResetEnable dom)
+    => Unsigned (n + k)
+    -> Addressing dom (Unsigned k)       dat a
+    -> Addressing dom (Unsigned (n + k)) dat a
+mask base = mapAddr $ \addr -> do
+    let (space, offset) = splitAddr addr
+    guard $ space == baseSpace
+    return offset
+  where
+    (baseSpace, _) = splitAddr base
+
+splitAddr :: (KnownNat n, KnownNat k) => Unsigned (n + k) -> (Unsigned n, Unsigned k)
+splitAddr = bitCoerce
+
+offset
+    :: (Num addr, Ord addr)
+    => (HiddenClockResetEnable dom)
+    => addr
+    -> Addressing dom addr dat a
+    -> Addressing dom addr dat a
+offset base = mapAddr $ \addr -> do
+    guard $ base <= addr
+    return $ addr - base
