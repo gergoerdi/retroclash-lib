@@ -54,8 +54,8 @@ scale
     => (HiddenClockResetEnable dom)
     => SNat k
     -> Signal dom (Maybe (Index (n * k)))
-    -> Signal dom (Maybe (Index n))
-scale k raw = scaledNext
+    -> (Signal dom (Maybe (Index n)), Signal dom (Maybe (Index k)))
+scale k raw = (scaledNext, enable (isJust <$> scaledNext) counterNext)
   where
     prev = register Nothing raw
     changed = raw ./=. prev
