@@ -57,14 +57,17 @@ scale
     -> Signal dom (Maybe (Index n))
 scale k raw = scaledNext
   where
-    changed = register Nothing raw ./=. raw
+    prev = register Nothing raw
+    changed = raw ./=. prev
 
-    counter = regEn (0 :: Index k) changed $
-        mux (isNothing <$> raw) (pure 0) $
+    counter = register (0 :: Index k) counterNext
+    counterNext =
+        mux (not <$> changed) counter $
+        mux (isNothing <$> prev) (pure 0) $
         nextIdx <$> counter
 
     scaled = register Nothing scaledNext
     scaledNext =
         mux (not <$> changed) scaled $
-        mux (counter .== 0) (maybe (Just 0) succIdx <$> scaled) $
+        mux (counterNext .== 0) (maybe (Just 0) succIdx <$> scaled) $
         scaled
