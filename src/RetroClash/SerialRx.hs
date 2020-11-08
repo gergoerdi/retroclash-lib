@@ -20,23 +20,23 @@ type RxState n = Slow (Maybe Bit, RxBit n)
 data RxBit n
     = Idle
     | StartBit
-    | DataBit (Index n) (BitVector n)
+    | DataBit (BitVector n) (Index n)
     | StopBit (BitVector n)
     deriving (Generic, Eq, Show, NFDataX)
 
 rxStep :: (KnownNat n) => Word32 -> Bit -> State (RxState n) (Maybe (BitVector n))
-rxStep bitDuration input = fmap getLast $ execWriterT $ do
+rxStep bitDuration input = fmap getLast . execWriterT $ do
     (slowly, (sample, s)) <- getSlow halfDuration
     slowly $ putSlow (sample <|> Just input, s)
     case s of
         Idle -> when (input == low) $ goto StartBit
         StartBit -> slowly $ for_ sample $ \sample -> do
             goto $ if sample == low then DataBit 0 0 else Idle
-        DataBit i x -> slowly $ for_ sample $ \sample -> do
-            let (x', _) = bvShiftR sample x
-            goto $ maybe StopBit DataBit (succIdx i) x'
-        StopBit x -> slowly $ for_ sample $ \sample -> do
-            when (sample == high) $ tell $ Last . Just $ x
+        DataBit xs i -> slowly $ for_ sample $ \sample -> do
+            let (xs', _) = bvShiftR sample xs
+            goto $ maybe (StopBit xs') (DataBit xs') $ succIdx i
+        StopBit xs -> slowly $ for_ sample $ \sample -> do
+            when (sample == high) $ tell $ Last . Just $ xs
             goto Idle
   where
     goto s = putSlow (Nothing, s)
