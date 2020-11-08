@@ -71,3 +71,4 @@ library:
     - RetroClash.Stack
     - RetroClash.BCD
     - RetroClash.Port
+    - RetroClash.PS2
