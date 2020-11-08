@@ -10,6 +10,7 @@ module RetroClash.Utils
     , toActiveDyn
 
     , bitwise
+    , parity
 
     , bvShiftL
     , bvShiftR
@@ -236,6 +237,9 @@ withStart x0 = mux (register True $ pure False) (pure x0)
 
 bitwise :: (BitPack a) => (BitVector (BitSize a) -> BitVector (BitSize a)) -> (a -> a)
 bitwise f = unpack . f . pack
+
+parity :: forall a n. (BitPack a, BitSize a ~ (n + 1)) => a -> Bit
+parity = fold xor . bitCoerce @_ @(Vec (BitSize a) Bit)
 
 bvShiftL :: forall n. (KnownNat n) => BitVector n -> Bit -> (Bit, BitVector n)
 bvShiftL xs x = bitCoerce $ xs ++# pack x

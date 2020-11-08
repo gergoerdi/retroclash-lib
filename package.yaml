@@ -72,3 +72,4 @@ library:
     - RetroClash.BCD
     - RetroClash.Port
     - RetroClash.Memory
+    - RetroClash.PS2
