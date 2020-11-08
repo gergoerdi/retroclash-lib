@@ -7,6 +7,7 @@ module RetroClash.PS2
     , ScanCode(..)
     , KeyCode(..)
     , parseScanCode
+    , keyPress
     ) where
 
 import Clash.Prelude
@@ -92,3 +93,7 @@ parseScanCode
     :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe (Unsigned 8)) -> Signal dom (Maybe ScanCode)
 parseScanCode = mealyState `flip` Init $ fmap getLast . execWriterT . traverse_ parser
+
+keyPress :: ScanCode -> Maybe KeyCode
+keyPress (ScanCode KeyPress kc) = Just kc
+keyPress _ = Nothing

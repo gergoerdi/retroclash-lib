@@ -72,3 +72,4 @@ library:
     - RetroClash.BCD
     - RetroClash.Port
     - RetroClash.PS2
+    - RetroClash.PS2.ASCII
