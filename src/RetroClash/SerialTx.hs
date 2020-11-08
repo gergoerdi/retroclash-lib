@@ -31,17 +31,17 @@ txStep bitDuration input = runAck $ do
     (slowly, s) <- getSlow bitDuration
     case s of
         Idle -> do
-            for_ input $ \x -> do
+            for_ input $ \xs -> do
                 tell $ Any True
-                putSlow $ StartBit x
+                putSlow $ StartBit xs
             return high
-        StartBit x -> do
-            slowly $ putSlow $ DataBit x 0
+        StartBit xs -> do
+            slowly $ putSlow $ DataBit xs 0
             return low
-        DataBit x i -> do
-            let (x', _) = bvShiftR 0 x
-            slowly $ putSlow $ maybe StopBit (DataBit x') $ succIdx i
-            return $ lsb x
+        DataBit xs i -> do
+            let (xs', _) = bvShiftR 0 xs
+            slowly $ putSlow $ maybe StopBit (DataBit xs') $ succIdx i
+            return $ lsb xs
         StopBit -> do
             slowly $ putSlow Idle
             return high
