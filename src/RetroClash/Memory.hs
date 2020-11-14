@@ -11,6 +11,7 @@ module RetroClash.Memory
     , mask
     , offset
     , readWrite, readOnly, port
+    , romFromFile, ram0
     ) where
 
 import Clash.Prelude hiding (rom)
@@ -89,6 +90,16 @@ matchRight
     => Addressing dom addr2 dat b
     -> Addressing dom (Either addr1 addr2) dat b
 matchRight = mapAddr (either (const Nothing) Just)
+
+romFromFile
+    :: (HiddenClockResetEnable dom, 1 <= n, BitPack dat)
+    => SNat n -> FilePath -> Addressing dom (Unsigned (CLog 2 n)) dat ()
+romFromFile SNat fileName = readOnly $ fmap unpack . romFilePow2 fileName
+
+ram0
+    :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, Num dat)
+    => SNat n -> Addressing dom (Unsigned (CLog 2 n)) dat ()
+ram0 size@SNat = readWrite $ blockRamU ClearOnReset size (const 0)
 
 readWrite :: (Num addr) => RAM dom addr dat -> Addressing dom addr dat ()
 readWrite ram = Addressing $ do
