@@ -14,7 +14,7 @@ import RetroClash.Slow
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.Monoid
-import Data.Foldable (for_)
+import Data.Foldable (traverse_)
 import Data.Word
 
 type TxState n = Slow (TxBit n)
@@ -27,13 +27,11 @@ data TxBit n
     deriving (Show, Eq, Generic, NFDataX)
 
 txStep :: forall n. (KnownNat n) => Word32 -> Maybe (BitVector n) -> State (TxState n) (Bit, Bool)
-txStep bitDuration input = runAck $ do
+txStep bitDuration input = do
     (slowly, s) <- getSlow bitDuration
-    case s of
+    output <- case s of
         Idle -> do
-            for_ input $ \xs -> do
-                tell $ Any True
-                putSlow $ StartBit xs
+            traverse_ (putSlow . StartBit) input
             return high
         StartBit xs -> do
             slowly $ putSlow $ DataBit xs 0
@@ -45,8 +43,8 @@ txStep bitDuration input = runAck $ do
         StopBit -> do
             slowly $ putSlow Idle
             return high
-  where
-    runAck = fmap (\(out, consumed) -> (out, getAny consumed)) . runWriterT
+    ready <- gets $ \(Slow _ s) -> s == Idle
+    return (output, ready)
 
 serialTxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
