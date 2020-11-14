@@ -7,6 +7,7 @@ module RetroClash.Memory
     , Addressing
     , memoryMap, memoryMap_
     , (<||>)
+    , matchLeft, matchRight
     , mask
     , offset
     , readWrite, readOnly, port
@@ -75,10 +76,19 @@ infix 1 <||>
     => Addressing dom addr1 dat a
     -> Addressing dom addr2 dat b
     -> Addressing dom (Either addr1 addr2) dat (a, b)
-body1 <||> body2 = do
-    x <- mapAddr (either Just (const Nothing)) body1
-    y <- mapAddr (either (const Nothing) Just) body2
-    return (x, y)
+body1 <||> body2 = liftA2 (,) (matchLeft body1) (matchRight body2)
+
+matchLeft
+    :: (HiddenClockResetEnable dom)
+    => Addressing dom addr1 dat a
+    -> Addressing dom (Either addr1 addr2) dat a
+matchLeft = mapAddr (either Just (const Nothing))
+
+matchRight
+    :: (HiddenClockResetEnable dom)
+    => Addressing dom addr2 dat b
+    -> Addressing dom (Either addr1 addr2) dat b
+matchRight = mapAddr (either (const Nothing) Just)
 
 readWrite :: (Num addr) => RAM dom addr dat -> Addressing dom addr dat ()
 readWrite ram = Addressing $ do
