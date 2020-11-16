@@ -29,18 +29,10 @@ type ROM dom a d = Signal dom a ->                              Signal dom d
 packRam :: (BitPack d) => RAM dom a (BitVector (BitSize d)) -> RAM dom a d
 packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
 
-newtype FirstSignal dom a = FirstSignal{ getFirstSignal :: Signal dom (First a) }
-
-instance Semigroup (FirstSignal dom a) where
-    x <> y = FirstSignal $ (<>) <$> getFirstSignal x <*> getFirstSignal y
-
-instance Monoid (FirstSignal dom a) where
-    mempty = FirstSignal $ pure mempty
-
 newtype Addressing dom addr dat a = Addressing
     { unAddressing :: ReaderT
                       (Signal dom (Maybe addr), Signal dom (Maybe dat))
-                      (Writer (FirstSignal dom dat))
+                      (Writer (Ap (Signal dom) (First dat)))
                       a
     }
     deriving newtype (Functor, Applicative, Monad)
@@ -53,7 +45,7 @@ memoryMap
 memoryMap addr write spec = (read, result)
   where
     (result, output) = runWriter $ runReaderT (unAddressing spec) (addr, write)
-    read = getFirst <$> getFirstSignal output
+    read = getFirst <$> getAp output
 
 memoryMap_
     :: Signal dom (Maybe addr)
@@ -67,7 +59,7 @@ mapAddr
     => (addr -> Maybe addr') -> Addressing dom addr' dat a -> Addressing dom addr dat a
 mapAddr f body = Addressing $ withReaderT (first $ fmap (f =<<)) $ do
     (addr, _) <- ask
-    censor (FirstSignal . whenAddr addr . getFirstSignal) $ unAddressing body
+    censor (Ap . whenAddr addr . getAp) $ unAddressing body
   where
     whenAddr addr sig = mux (delay False $ isJust <$> addr) sig (pure mempty)
 
@@ -105,13 +97,13 @@ readWrite :: (Num addr) => RAM dom addr dat -> Addressing dom addr dat ()
 readWrite ram = Addressing $ do
     (addr, w) <- ask
     let output = ram (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> w)
-    tell $ FirstSignal $ pure <$> output
+    tell $ Ap $ pure <$> output
 
 readOnly :: (Num addr) => ROM dom addr dat -> Addressing dom addr dat ()
 readOnly rom = Addressing $ do
     (addr, w) <- ask
     let output = rom (fromMaybe 0 <$> addr)
-    tell $ FirstSignal $ pure <$> output
+    tell $ Ap $ pure <$> output
 
 port
     :: (HiddenClockResetEnable dom, NFDataX dat)
@@ -120,7 +112,7 @@ port
 port mkPort = Addressing $ do
     (addr, w) <- ask
     let (output, result) = mkPort $ portFromAddr addr w
-    tell $ FirstSignal $ delay mempty $ First <$> output
+    tell $ Ap $ delay mempty $ First <$> output
     return result
 
 mask
