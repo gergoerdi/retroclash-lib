@@ -241,8 +241,8 @@ bitwise f = unpack . f . pack
 parity :: forall a n. (BitPack a, BitSize a ~ (n + 1)) => a -> Bit
 parity = fold xor . bitCoerce @_ @(Vec (BitSize a) Bit)
 
-bvShiftL :: forall n. (KnownNat n) => BitVector n -> Bit -> (Bit, BitVector n)
-bvShiftL xs x = bitCoerce $ xs ++# pack x
+bvShiftL :: (KnownNat n) => BitVector n -> Bit -> (Bit, BitVector n)
+bvShiftL xs x = bitCoerce (xs, x)
 
-bvShiftR :: forall n. (KnownNat n) => Bit -> BitVector n -> (BitVector n, Bit)
-bvShiftR x xs = bitCoerce $ pack x ++# xs
+bvShiftR :: (KnownNat n) => Bit -> BitVector n -> (BitVector n, Bit)
+bvShiftR x xs = bitCoerce (x, xs)
