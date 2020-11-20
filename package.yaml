@@ -61,7 +61,6 @@ library:
     - RetroClash.Barbies
     - RetroClash.Keypad
     - RetroClash.SevenSegment
-    - RetroClash.Slow
     - RetroClash.SerialRx
     - RetroClash.SerialTx
     - RetroClash.VGA
