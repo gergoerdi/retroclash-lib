@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards, LambdaCase #-}
 module RetroClash.SerialRx
     ( serialRx
     , serialRxDyn
@@ -7,47 +7,51 @@ module RetroClash.SerialRx
 import Clash.Prelude
 import RetroClash.Utils
 import RetroClash.Clock
-import RetroClash.Slow
 
 import Control.Monad.State
 import Control.Monad.Trans.Writer
 import Data.Monoid
 import Data.Word
-import Data.Foldable (for_)
 
-type RxState n = Slow (Maybe Bit, RxBit n)
+data RxState n
+    = Idle
+    | RxBit Word32 (Maybe Bit) (RxBit n)
+    deriving (Generic, Eq, Show, NFDataX)
 
 data RxBit n
-    = Idle
-    | StartBit
+    = StartBit
     | DataBit (BitVector n) (Index n)
     | StopBit (BitVector n)
     deriving (Generic, Eq, Show, NFDataX)
 
 rxStep :: (KnownNat n) => Word32 -> Bit -> State (RxState n) (Maybe (BitVector n))
-rxStep bitDuration input = fmap getLast . execWriterT $ do
-    (slowly, (sample, s)) <- getSlow halfDuration
-    slowly $ putSlow (sample <|> Just input, s)
-    case s of
-        Idle -> when (input == low) $ goto StartBit
-        StartBit -> slowly $ for_ sample $ \sample -> do
-            goto $ if sample == low then DataBit 0 0 else Idle
-        DataBit xs i -> slowly $ for_ sample $ \sample -> do
+rxStep bitDuration input = fmap getLast . execWriterT $ get >>= \case
+    Idle -> do
+        when (input == low) $ goto StartBit
+    RxBit cnt sample b | cnt < halfDuration -> do
+        put $ RxBit (cnt + 1) sample b
+    RxBit _ Nothing b -> do
+        put $ RxBit 0 (Just input) b
+    RxBit _ (Just sample) rx -> case rx of
+        StartBit -> do
+            if sample == low then goto (DataBit 0 0) else put Idle
+        DataBit xs i -> do
             let (xs', _) = bvShiftR sample xs
             goto $ maybe (StopBit xs') (DataBit xs') $ succIdx i
-        StopBit xs -> slowly $ for_ sample $ \sample -> do
-            when (sample == high) $ tell $ Last . Just $ xs
-            goto Idle
+        StopBit xs -> do
+            when (sample == high) $ tell $ pure xs
+            put Idle
   where
-    goto s = putSlow (Nothing, s)
-    halfDuration = bitDuration `div` 2
+    halfDuration = bitDuration `shiftR` 2
+
+    goto = put . RxBit 0 Nothing
 
 serialRxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
     => Signal dom Word32
     -> Signal dom Bit
     -> Signal dom (Maybe (BitVector n))
-serialRxDyn bitDuration input = mealyStateB (uncurry rxStep) (Slow 0 (Nothing, Idle)) (bitDuration, input)
+serialRxDyn bitDuration input = mealyStateB (uncurry rxStep) Idle (bitDuration, input)
 
 serialRx
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)

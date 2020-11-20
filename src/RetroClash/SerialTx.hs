@@ -1,5 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE RecordWildCards, LambdaCase #-}
 module RetroClash.SerialTx
     ( serialTx
     , serialTxDyn
@@ -9,49 +8,53 @@ module RetroClash.SerialTx
 import Clash.Prelude
 import RetroClash.Utils
 import RetroClash.Clock
-import RetroClash.Slow
 
 import Control.Monad.State
 import Control.Monad.Writer
-import Data.Monoid
 import Data.Foldable (traverse_)
 import Data.Word
 
-type TxState n = Slow (TxBit n)
+data TxState n
+    = Idle
+    | TxBit Word32 (TxBit n)
+    deriving (Show, Eq, Generic, NFDataX)
 
 data TxBit n
-    = Idle
-    | StartBit (BitVector n)
+    = StartBit (BitVector n)
     | DataBit (BitVector n) (Index n)
     | StopBit
     deriving (Show, Eq, Generic, NFDataX)
 
 txStep :: forall n. (KnownNat n) => Word32 -> Maybe (BitVector n) -> State (TxState n) (Bit, Bool)
-txStep bitDuration input = do
-    (slowly, s) <- getSlow bitDuration
-    output <- case s of
-        Idle -> do
-            traverse_ (putSlow . StartBit) input
-            return high
+txStep bitDuration input = slowly $ fmap (fmap getAny) . runWriterT $ get >>= \case
+    Idle -> do
+        tell $ Any True
+        traverse_ (goto . StartBit) input
+        return high
+    TxBit cnt tx -> case tx of
         StartBit xs -> do
-            slowly $ putSlow $ DataBit xs 0
+            goto $ DataBit xs 0
             return low
         DataBit xs i -> do
             let (xs', _) = bvShiftR 0 xs
-            slowly $ putSlow $ maybe StopBit (DataBit xs') $ succIdx i
+            goto $ maybe StopBit (DataBit xs') $ succIdx i
             return $ lsb xs
         StopBit -> do
-            slowly $ putSlow Idle
+            put Idle
             return high
-    ready <- gets $ \(Slow _ s) -> s == Idle
-    return (output, ready)
+  where
+    goto = put . TxBit 0
+
+    slowly act = get >>= \case
+        TxBit cnt tx | cnt < bitDuration -> act <* put (TxBit (cnt + 1) tx)
+        _ -> act
 
 serialTxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
     => Signal dom Word32
     -> Signal dom (Maybe (BitVector n))
     -> (Signal dom Bit, Signal dom Bool)
-serialTxDyn bitDuration input = mealyStateB (uncurry txStep) (Slow 0 Idle) (bitDuration, input)
+serialTxDyn bitDuration input = mealyStateB (uncurry txStep) Idle (bitDuration, input)
 
 serialTx
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
