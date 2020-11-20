@@ -26,13 +26,11 @@ data PS2 dom = PS2
 samplePS2
     :: forall dom. (HiddenClockResetEnable dom, KnownNat (ClockDivider dom (Microseconds 1)))
     => PS2 dom -> Signal dom (Maybe Bit)
-samplePS2 PS2{..} = enable (isFalling low . lowpass $ ps2Clk) (lowpass ps2Data)
+samplePS2 PS2{..} =
+    enable (isFalling low . lowpass $ ps2Clk) (lowpass ps2Data)
   where
     lowpass :: Signal dom Bit -> Signal dom Bit
     lowpass = debounce (SNat @(Microseconds 1)) low
-
-    ps2Clk' = lowpass ps2Clk
-    ps2Data' = lowpass ps2Data
 
 data PS2State
     = Idle
@@ -49,8 +47,7 @@ decoder x = get >>= \case
         let (xs', _) = bvShiftR x xs
         put $ maybe (Parity xs') (Bit xs') $ succIdx i
     Parity xs -> do
-        let checked = x /= parity xs
-        put $ Stop $ if checked then Just (unpack xs) else Nothing
+        put $ Stop $ unpack xs <$ guard (parity xs /= x)
     Stop b -> do
         when (x == high) $ tell . Last $ b
         put Idle
@@ -58,7 +55,9 @@ decoder x = get >>= \case
 decodePS2
     :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe Bit) -> Signal dom (Maybe (Unsigned 8))
-decodePS2 = mealyState `flip` Idle $ fmap getLast . execWriterT . traverse_ decoder
+decodePS2 = mealyState sampleDecoder Idle
+  where
+    sampleDecoder = fmap getLast . execWriterT . traverse_ decoder
 
 data KeyEvent = KeyPress | KeyRelease
     deriving (Generic, Eq, Show, NFDataX)
@@ -92,7 +91,9 @@ parser raw = get >>= \case
 parseScanCode
     :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe (Unsigned 8)) -> Signal dom (Maybe ScanCode)
-parseScanCode = mealyState `flip` Init $ fmap getLast . execWriterT . traverse_ parser
+parseScanCode = mealyState byteParser Init
+  where
+    byteParser = fmap getLast . execWriterT . traverse_ parser
 
 keyPress :: ScanCode -> Maybe KeyCode
 keyPress (ScanCode KeyPress kc) = Just kc
