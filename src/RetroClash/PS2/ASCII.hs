@@ -42,9 +42,18 @@ asciiMap = fmap fromChar . charMap
 charMap :: KeyCode -> Maybe Char
 charMap 0x05a = Just '\r'
 charMap 0x15a = Just '\r' -- Keypad
+charMap 0x00d = Just '\t'
 charMap 0x029 = Just ' '
 charMap 0x04c = Just ';'
 charMap 0x052 = Just '\''
+charMap 0x054 = Just '['
+charMap 0x05b = Just ']'
+charMap 0x05d = Just '\\'
+charMap 0x04a = Just '/'
+charMap 0x041 = Just ','
+charMap 0x049 = Just '.'
+charMap 0x04e = Just '-'
+charMap 0x055 = Just '='
 charMap 0x045 = Just '0'
 charMap 0x016 = Just '1'
 charMap 0x01e = Just '2'
