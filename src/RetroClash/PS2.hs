@@ -2,12 +2,16 @@
 module RetroClash.PS2
     ( PS2(..)
     , samplePS2
+
     , decodePS2
+
     , KeyEvent(..)
     , ScanCode(..)
     , KeyCode(..)
     , parseScanCode
+
     , keyPress
+    , keyState
     ) where
 
 import Clash.Prelude
@@ -98,3 +102,15 @@ parseScanCode = mealyState byteParser Init
 keyPress :: ScanCode -> Maybe KeyCode
 keyPress (ScanCode KeyPress kc) = Just kc
 keyPress _ = Nothing
+
+keyState
+    :: (HiddenClockResetEnable dom)
+    => KeyCode
+    -> Signal dom (Maybe ScanCode)
+    -> Signal dom Bool
+keyState target = regMaybe False . fmap fromScanCode
+  where
+    fromScanCode sc = do
+        ScanCode ev kc <- sc
+        guard $ kc == target
+        return $ ev == KeyPress
