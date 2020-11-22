@@ -32,6 +32,9 @@ module RetroClash.Utils
     , integrate
     , debounce
 
+    , riseEveryWhen
+    , oscillateWhen
+
     , oneHot
     , roundRobin
 
@@ -246,3 +249,17 @@ bvShiftL xs x = bitCoerce (xs, x)
 
 bvShiftR :: (KnownNat n) => Bit -> BitVector n -> (BitVector n, Bit)
 bvShiftR x xs = bitCoerce (x, xs)
+
+riseEveryWhen
+    :: forall n dom. (HiddenClockResetEnable dom, KnownNat n)
+    => SNat n -> Signal dom Bool -> Signal dom Bool
+riseEveryWhen n trigger = isRising False $ cnt .==. pure maxBound
+  where
+    cnt = regEn (0 :: Index n) trigger (nextIdx <$> cnt)
+
+oscillateWhen
+    :: (HiddenClockResetEnable dom)
+    => Bool -> Signal dom Bool -> Signal dom Bool
+oscillateWhen init trigger = r
+  where
+    r = regEn init trigger $ not <$> r
