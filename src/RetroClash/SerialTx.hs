@@ -43,10 +43,10 @@ txStep bitDuration input = slowly $ fmap (fmap getAny) . runWriterT $ get >>= \c
             put Idle
             return high
   where
-    goto = put . TxBit 0
+    goto = put . TxBit (bitDuration - 1)
 
     slowly act = get >>= \case
-        TxBit cnt tx | cnt < bitDuration -> act <* put (TxBit (cnt + 1) tx)
+        TxBit cnt tx | cnt > 0 -> act <* put (TxBit (cnt - 1) tx)
         _ -> act
 
 serialTxDyn
