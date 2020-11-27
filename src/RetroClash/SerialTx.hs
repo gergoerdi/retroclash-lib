@@ -26,12 +26,12 @@ data TxBit n
     deriving (Show, Eq, Generic, NFDataX)
 
 txStep :: forall n. (KnownNat n) => Word32 -> Maybe (BitVector n) -> State (TxState n) (Bit, Bool)
-txStep bitDuration input = slowly $ fmap (fmap getAny) . runWriterT $ get >>= \case
+txStep bitDuration input = fmap (fmap getAny) . runWriterT $ get >>= \case
     Idle -> do
         tell $ Any True
         traverse_ (goto . StartBit) input
         return high
-    TxBit cnt tx -> case tx of
+    TxBit cnt tx -> slowly cnt tx $ case tx of
         StartBit xs -> do
             goto $ DataBit xs 0
             return low
@@ -45,9 +45,9 @@ txStep bitDuration input = slowly $ fmap (fmap getAny) . runWriterT $ get >>= \c
   where
     goto = put . TxBit (bitDuration - 1)
 
-    slowly act = get >>= \case
-        TxBit cnt tx | cnt > 0 -> act <* put (TxBit (cnt - 1) tx)
-        _ -> act
+    slowly cnt tx act
+        | cnt > 0 = act <* put (TxBit (cnt - 1) tx)
+        | otherwise = act
 
 serialTxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
