@@ -22,6 +22,8 @@ dependencies:
   - transformers
   - barbies
   - lens
+  - dependent-map
+  - dependent-sum
 
 source-dirs:
   - src
