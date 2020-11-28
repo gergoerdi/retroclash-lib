@@ -45,6 +45,8 @@ dependencies:
   - transformers
   - barbies ^>= 2.0.1
   - lens
+  - dependent-map
+  - dependent-sum
 
 source-dirs:
   - src
