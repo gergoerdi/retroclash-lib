@@ -10,6 +10,7 @@ module RetroClash.Memory
     , matchLeft, matchRight
     , mask
     , offset
+    , override
     , readWrite, readOnly, port
     , romFromFile, ram0
     ) where
@@ -70,6 +71,17 @@ infix 1 <||>
     -> Addressing dom addr2 dat b
     -> Addressing dom (Either addr1 addr2) dat (a, b)
 body1 <||> body2 = liftA2 (,) (matchLeft body1) (matchRight body2)
+
+override
+    :: (HiddenClockResetEnable dom)
+    => Signal dom (Maybe dat)
+    -> Addressing dom addr dat a
+    -> Addressing dom addr dat a
+override sig = Addressing . censor (mappend sig') . withReaderT (first propagate) . unAddressing
+  where
+    sig' = Ap $ First <$> sig
+
+    propagate = mux (isJust <$> sig) (pure Nothing)
 
 matchLeft
     :: (HiddenClockResetEnable dom)
