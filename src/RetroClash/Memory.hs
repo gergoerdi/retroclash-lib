@@ -1,11 +1,23 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RankNTypes, RecursiveDo #-}
-module RetroClash.Memory where
+module RetroClash.Memory
+    ( memoryMap, memoryMap_
+
+    , conduit, readWrite, readWrite_
+    , romFromFile, ram0, port
+    , connect
+
+    , override
+
+    , from
+    , matchLeft, matchRight
+    , tag
+    ) where
 
 import Clash.Prelude
 import RetroClash.Utils
 import RetroClash.Port
-import Control.Arrow (second)
+import Control.Arrow (first, second)
 import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
@@ -30,21 +42,19 @@ instance GEq (Component s) where
 instance GCompare (Component s) where
     gcompare (Component a _) (Component b _) = gcompare a b
 
-newtype FanIn dom addr = FanIn{ fanIn :: Signal dom `Ap` First addr }
+newtype FanIn dom a = FanIn{ getFanIn :: Signal dom `Ap` First a }
     deriving newtype (Semigroup, Monoid)
 
 newtype AddrMap s dom = AddrMap{ addrMap :: DMap (Component s) (FanIn dom) }
+    deriving newtype (Monoid)
 
 instance Semigroup (AddrMap s dom) where
     AddrMap map1 <> AddrMap map2 = AddrMap $ unionWithKey (const mappend) map1 map2
 
-instance Monoid (AddrMap s dom) where
-    mempty = AddrMap mempty
-
 newtype Addressing s dom dat addr a = Addressing
     { unAddressing :: RWS
-          (Signal dom (Maybe addr), Signal dom (Maybe dat), AddrMap s dom)
-          (Signal dom `Ap` First (Maybe dat), AddrMap s dom)
+          (FanIn dom addr, Signal dom (Maybe dat), AddrMap s dom)
+          (FanIn dom (Maybe dat), AddrMap s dom)
           Int
           a
     }
@@ -55,31 +65,27 @@ memoryMap
     -> Signal dom (Maybe dat)
     -> (forall s. Addressing s dom dat addr a)
     -> (Signal dom (Maybe dat), a)
-memoryMap addr wr body = (join . getFirst <$> read, x)
+memoryMap addr wr body = (join <$> firstIn read, x)
   where
-    (x, (Ap read, conns)) = evalRWS (unAddressing body) (addr, wr, conns) 0
+    (x, (read, conns)) = evalRWS (unAddressing body) (fanInMaybe addr, wr, conns) 0
 
-readWrite_
-    :: (HiddenClockResetEnable dom, Typeable addr')
-    => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> Signal dom (Maybe dat))
-    -> Addressing s dom dat addr (Component s addr')
-readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr ->
-    let read = mkComponent addr wr
-    in (read, ())
-
-theType :: forall (a :: Type). (Typeable a) => TypeRep a
-theType = typeOf undefined
+memoryMap_
+    :: Signal dom (Maybe addr)
+    -> Signal dom (Maybe dat)
+    -> (forall s. Addressing s dom dat addr ())
+    -> Signal dom (Maybe dat)
+memoryMap_ addr wr body = fst $ memoryMap addr wr body
 
 conduit
     :: (Typeable addr', HiddenClockResetEnable dom)
     => Signal dom (Maybe dat)
     -> Addressing s dom dat addr (Component s addr', Signal dom (Maybe addr'), Signal dom (Maybe dat))
 conduit read = Addressing $ do
-    component@(Component _ i) <- Component theType <$> get <* modify succ
+    component <- Component theType <$> get <* modify succ
     (_, wr, addrs) <- ask
-    let addr = fmap getFirst . getAp $ maybe mempty fanIn $ DMap.lookup component (addrMap addrs)
+    let addr = firstIn . fromMaybe mempty $ DMap.lookup component (addrMap addrs)
         selected = isJust <$> addr
-    tell (Ap $ mux (register False selected) (pure <$> read) (pure mempty), mempty)
+    tell (gated (register False selected) (fanIn read), mempty)
     return (component, addr, wr)
 
 readWrite
@@ -90,6 +96,12 @@ readWrite mkComponent = Addressing $ do
     rec (component, addr, wr) <- unAddressing $ conduit read
         let (read, x) = mkComponent addr wr
     return (component, x)
+
+readWrite_
+    :: (HiddenClockResetEnable dom, Typeable addr')
+    => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> Signal dom (Maybe dat))
+    -> Addressing s dom dat addr (Component s addr')
+readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr -> (mkComponent addr wr, ())
 
 romFromFile
     :: (HiddenClockResetEnable dom, 1 <= n, BitPack dat)
@@ -118,16 +130,15 @@ matchAddr
     :: (addr -> Maybe addr')
     -> Addressing s dom dat addr' a
     -> Addressing s dom dat addr a
-matchAddr match body = Addressing $ do
-    (addr, wr, addrs) <- ask
-    let addr' = (match =<<) <$> addr
-        wr' = mux (isJust <$> addr') wr (pure Nothing)
-    s <- get
-    let (x, s', (read, components)) = runRWS (unAddressing body) (addr', wr', addrs) s
-    put s'
-    let read' = Ap . fmap First $ mux (isJust <$> addr') (fmap getFirst . getAp $ read) (pure Nothing)
-    tell (read', components)
-    return x
+matchAddr match body = Addressing $ rws $ \(addr, wr, addrs) s ->
+  let addr' = fanInMaybe . fmap (match =<<) . firstIn $ addr
+      (x, s', (read, components)) = runRWS (unAddressing body) (addr', wr, addrs) s
+      selected = isJust <$> firstIn addr'
+      read' = gated selected read
+  in (x, s', (read', components))
+
+gated :: Signal dom Bool -> FanIn dom a -> FanIn dom a
+gated p sig = fanInMaybe $ mux p (firstIn sig) (pure Nothing)
 
 tag
     :: addr'
@@ -148,14 +159,13 @@ matchRight
 matchRight = matchAddr $ either (const Nothing) Just
 
 override
-    :: forall dom dat addr a s. (HiddenClockResetEnable dom)
+    :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe dat)
     -> Addressing s dom dat addr a
     -> Addressing s dom dat addr a
-override sig = Addressing . censor (\(read, conns) -> (overrule read, conns)) . unAddressing
+override sig = Addressing . censor (first $ mappend sig') . unAddressing
   where
-    overrule :: Signal dom `Ap` First (Maybe dat) -> Signal dom `Ap` First (Maybe dat)
-    overrule read = Ap $ mux (isJust <$> sig) (pure <$> sig) (getAp read)
+    sig' = gated (isJust <$> sig) (fanIn sig)
 
 from
     :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Show addr, Show addr')
@@ -168,11 +178,23 @@ from base = matchAddr $ \addr -> do
     guard $ offset <= lim
     return $ fromIntegral offset
   where
-    lim = fromIntegral @addr' @addr maxBound
+    lim = fromIntegral (maxBound :: addr')
 
 connect
     :: Component s addr
     -> Addressing s dom dat addr ()
 connect component@(Component _ i) = Addressing $ do
     (addr, _, _) <- ask
-    tell (mempty, AddrMap $ DMap.singleton component (FanIn . Ap . fmap First $ addr))
+    tell (mempty, AddrMap $ DMap.singleton component addr)
+
+theType :: forall (a :: Type). (Typeable a) => TypeRep a
+theType = typeOf undefined
+
+firstIn :: FanIn dom a -> Signal dom (Maybe a)
+firstIn = fmap getFirst . getAp . getFanIn
+
+fanInMaybe :: Signal dom (Maybe a) -> FanIn dom a
+fanInMaybe = FanIn . Ap . fmap First
+
+fanIn :: Signal dom a -> FanIn dom a
+fanIn = fanInMaybe . fmap pure
