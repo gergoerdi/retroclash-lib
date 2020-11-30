@@ -4,7 +4,7 @@ module RetroClash.Memory
     ( memoryMap, memoryMap_
 
     , conduit, readWrite, readWrite_
-    , romFromFile, ram0, port
+    , romFromFile, ram0, port, port_
     , connect
 
     , override
@@ -30,6 +30,7 @@ import Type.Reflection
 type RAM dom addr dat = Signal dom addr -> Signal dom (Maybe (addr, dat)) -> Signal dom dat
 type ROM dom addr dat = Signal dom addr ->                                   Signal dom dat
 type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
+type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
 
 packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
 packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
@@ -125,6 +126,14 @@ port
 port mkPort = readWrite $ \addr wr ->
     let (read, x) = mkPort $ portFromAddr addr wr
     in (delay Nothing read, x)
+
+port_
+    :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
+    => Port_ dom addr' dat
+    -> Addressing s dom dat addr (Component s addr')
+port_ mkPort = readWrite_ $ \addr wr ->
+    let read = mkPort $ portFromAddr addr wr
+    in (delay Nothing read)
 
 matchAddr
     :: (addr -> Maybe addr')
