@@ -86,7 +86,7 @@ conduit read = Addressing $ do
     (_, wr, addrs) <- ask
     let addr = firstIn . fromMaybe mempty $ DMap.lookup component (addrMap addrs)
         selected = isJust <$> addr
-    tell (gated (register False selected) (fanIn read), mempty)
+    tell (gated (delay False selected) (fanIn read), mempty)
     return (component, addr, wr)
 
 readWrite
@@ -142,9 +142,7 @@ matchAddr
 matchAddr match body = Addressing $ rws $ \(addr, wr, addrs) s ->
   let addr' = fanInMaybe . fmap (match =<<) . firstIn $ addr
       (x, s', (read, components)) = runRWS (unAddressing body) (addr', wr, addrs) s
-      selected = isJust <$> firstIn addr'
-      read' = gated selected read
-  in (x, s', (read', components))
+  in (x, s', (read, components))
 
 gated :: Signal dom Bool -> FanIn dom a -> FanIn dom a
 gated p sig = fanInMaybe $ mux p (firstIn sig) (pure Nothing)
@@ -156,20 +154,17 @@ tag
 tag t = matchAddr $ \addr -> Just (t, addr)
 
 matchLeft
-    :: (HiddenClockResetEnable dom)
-    => Addressing s dom dat addr1 a
+    :: Addressing s dom dat addr1 a
     -> Addressing s dom dat (Either addr1 addr2) a
 matchLeft = matchAddr $ either Just (const Nothing)
 
 matchRight
-    :: (HiddenClockResetEnable dom)
-    => Addressing s dom dat addr2 a
+    :: Addressing s dom dat addr2 a
     -> Addressing s dom dat (Either addr1 addr2) a
 matchRight = matchAddr $ either (const Nothing) Just
 
 override
-    :: (HiddenClockResetEnable dom)
-    => Signal dom (Maybe dat)
+    :: Signal dom (Maybe dat)
     -> Addressing s dom dat addr a
     -> Addressing s dom dat addr a
 override sig = Addressing . censor (first $ mappend sig') . unAddressing
@@ -177,7 +172,7 @@ override sig = Addressing . censor (first $ mappend sig') . unAddressing
     sig' = gated (isJust <$> sig) (fanIn sig)
 
 from
-    :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Show addr, Show addr')
+    :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr
     -> Addressing s dom dat addr' a
     -> Addressing s dom dat addr a
