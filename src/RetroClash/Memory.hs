@@ -1,5 +1,5 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes, RecursiveDo #-}
+{-# LANGUAGE RankNTypes #-}
 module RetroClash.Memory
     ( memoryMap, memoryMap_
 
@@ -81,12 +81,8 @@ conduit
     :: (Typeable addr', HiddenClockResetEnable dom)
     => Signal dom (Maybe dat)
     -> Addressing s dom dat addr (Component s addr', Signal dom (Maybe addr'), Signal dom (Maybe dat))
-conduit read = Addressing $ do
-    component <- Component theType <$> get <* modify succ
-    (_, wr, addrs) <- ask
-    let addr = firstIn . fromMaybe mempty $ DMap.lookup component (addrMap addrs)
-        selected = isJust <$> addr
-    tell (gated (delay False selected) (fanIn read), mempty)
+conduit read = do
+    (component, (addr, wr)) <- readWrite $ \addr wr -> (read, (addr, wr))
     return (component, addr, wr)
 
 readWrite
@@ -94,8 +90,12 @@ readWrite
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
     -> Addressing s dom dat addr (Component s addr', a)
 readWrite mkComponent = Addressing $ do
-    rec (component, addr, wr) <- unAddressing $ conduit read
-        let (read, x) = mkComponent addr wr
+    component <- Component theType <$> get <* modify succ
+    (_, wr, addrs) <- ask
+    let addr = firstIn . fromMaybe mempty $ DMap.lookup component (addrMap addrs)
+        selected = isJust <$> addr
+    let (read, x) = mkComponent addr wr
+    tell (gated (delay False selected) (fanIn read), mempty)
     return (component, x)
 
 readWrite_
