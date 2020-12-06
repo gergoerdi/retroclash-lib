@@ -61,6 +61,7 @@ newtype Addressing s dom dat addr a = Addressing
     }
     deriving newtype (Functor, Applicative, Monad)
 
+{-# INLINE memoryMap #-}
 memoryMap
     :: Signal dom (Maybe addr)
     -> Signal dom (Maybe dat)
@@ -70,6 +71,7 @@ memoryMap addr wr body = (join <$> firstIn read, x)
   where
     (x, (read, conns)) = evalRWS (unAddressing body) (fanInMaybe addr, wr, conns) 0
 
+{-# INLINE memoryMap_ #-}
 memoryMap_
     :: Signal dom (Maybe addr)
     -> Signal dom (Maybe dat)
@@ -77,6 +79,7 @@ memoryMap_
     -> Signal dom (Maybe dat)
 memoryMap_ addr wr body = fst $ memoryMap addr wr body
 
+{-# INLINE conduit #-}
 conduit
     :: (Typeable addr', HiddenClockResetEnable dom)
     => Signal dom (Maybe dat)
@@ -89,6 +92,7 @@ conduit read = Addressing $ do
     tell (gated (delay False selected) (fanIn read), mempty)
     return (component, addr, wr)
 
+{-# INLINE readWrite #-}
 readWrite
     :: (HiddenClockResetEnable dom, Typeable addr')
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
@@ -98,12 +102,14 @@ readWrite mkComponent = Addressing $ do
         let (read, x) = mkComponent addr wr
     return (component, x)
 
+{-# INLINE readWrite_ #-}
 readWrite_
     :: (HiddenClockResetEnable dom, Typeable addr')
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> Signal dom (Maybe dat))
     -> Addressing s dom dat addr (Component s addr')
 readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr -> (mkComponent addr wr, ())
 
+{-# INLINE romFromFile #-}
 romFromFile
     :: (HiddenClockResetEnable dom, 1 <= n, BitPack dat)
     => SNat n
@@ -112,6 +118,7 @@ romFromFile
 romFromFile size@SNat fileName = readWrite_ $ \addr _wr ->
     fmap (Just . unpack) $ romFilePow2 fileName (maybe 0 bitCoerce <$> addr)
 
+{-# INLINE ram0 #-}
 ram0
     :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, Num dat)
     => SNat n
@@ -119,6 +126,7 @@ ram0
 ram0 size@SNat = readWrite_ $ \addr wr ->
       fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
 
+{-# INLINE port #-}
 port
     :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
     => Port dom addr' dat a
@@ -127,6 +135,7 @@ port mkPort = readWrite $ \addr wr ->
     let (read, x) = mkPort $ portFromAddr addr wr
     in (delay Nothing read, x)
 
+{-# INLINE port_ #-}
 port_
     :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
     => Port_ dom addr' dat
@@ -135,6 +144,7 @@ port_ mkPort = readWrite_ $ \addr wr ->
     let read = mkPort $ portFromAddr addr wr
     in (delay Nothing read)
 
+{-# INLINE matchAddr #-}
 matchAddr
     :: (addr -> Maybe addr')
     -> Addressing s dom dat addr' a
@@ -144,25 +154,30 @@ matchAddr match body = Addressing $ rws $ \(addr, wr, addrs) s ->
       (x, s', (read, components)) = runRWS (unAddressing body) (addr', wr, addrs) s
   in (x, s', (read, components))
 
+{-# INLINE gated #-}
 gated :: Signal dom Bool -> FanIn dom a -> FanIn dom a
 gated p sig = fanInMaybe $ mux p (firstIn sig) (pure Nothing)
 
+{-# INLINE tag #-}
 tag
     :: addr'
     -> Addressing s dom dat (addr', addr) a
     -> Addressing s dom dat addr a
 tag t = matchAddr $ \addr -> Just (t, addr)
 
+{-# INLINE matchLeft #-}
 matchLeft
     :: Addressing s dom dat addr1 a
     -> Addressing s dom dat (Either addr1 addr2) a
 matchLeft = matchAddr $ either Just (const Nothing)
 
+{-# INLINE matchRight #-}
 matchRight
     :: Addressing s dom dat addr2 a
     -> Addressing s dom dat (Either addr1 addr2) a
 matchRight = matchAddr $ either (const Nothing) Just
 
+{-# INLINE override #-}
 override
     :: Signal dom (Maybe dat)
     -> Addressing s dom dat addr a
@@ -171,6 +186,7 @@ override sig = Addressing . censor (first $ mappend sig') . unAddressing
   where
     sig' = gated (isJust <$> sig) (fanIn sig)
 
+{-# INLINE from #-}
 from
     :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr
@@ -184,6 +200,7 @@ from base = matchAddr $ \addr -> do
   where
     lim = fromIntegral (maxBound :: addr')
 
+{-# INLINE connect #-}
 connect
     :: Component s addr
     -> Addressing s dom dat addr ()
@@ -194,11 +211,14 @@ connect component@(Component _ i) = Addressing $ do
 theType :: forall (a :: Type). (Typeable a) => TypeRep a
 theType = typeOf undefined
 
+{-# INLINE firstIn #-}
 firstIn :: FanIn dom a -> Signal dom (Maybe a)
 firstIn = fmap getFirst . getAp . getFanIn
 
+{-# INLINE fanInMaybe #-}
 fanInMaybe :: Signal dom (Maybe a) -> FanIn dom a
 fanInMaybe = FanIn . Ap . fmap First
 
+{-# INLINE fanIn #-}
 fanIn :: Signal dom a -> FanIn dom a
 fanIn = fanInMaybe . fmap pure
