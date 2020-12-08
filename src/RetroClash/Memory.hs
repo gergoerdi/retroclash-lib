@@ -90,7 +90,7 @@ readWrite
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
     -> Addressing s dom dat addr (Component s addr', a)
 readWrite mkComponent = Addressing $ do
-    component <- Component theType <$> get <* modify succ
+    component <- Component typeRep <$> get <* modify succ
     (_, wr, addrs) <- ask
     let addr = firstIn . fromMaybe mempty $ DMap.lookup component (addrMap addrs)
         selected = isJust <$> addr
@@ -190,9 +190,6 @@ connect
 connect component@(Component _ i) = Addressing $ do
     (addr, _, _) <- ask
     tell (mempty, AddrMap $ DMap.singleton component addr)
-
-theType :: forall (a :: Type). (Typeable a) => TypeRep a
-theType = typeOf undefined
 
 firstIn :: FanIn dom a -> Signal dom (Maybe a)
 firstIn = fmap getFirst . getAp . getFanIn
