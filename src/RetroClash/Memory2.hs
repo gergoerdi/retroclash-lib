@@ -3,8 +3,6 @@
 
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, DerivingStrategies #-}
-
-{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 module RetroClash.Memory2 where
 
 import Clash.Prelude
@@ -25,18 +23,29 @@ import Type.Reflection
 data Component {- s -} (addr :: Type) = Component (TypeRep addr) Int
 
 instance GEq (Component {- s -}) where
+    {-# INLINE geq #-}
     geq (Component a _) (Component b _) = geq a b
 
 instance GCompare (Component {- s -}) where
+    {-# INLINE gcompare #-}
     gcompare (Component a _) (Component b _) = gcompare a b
 
 newtype FanIn dom a = FanIn{ getFanIn :: Signal dom `Ap` First a }
     deriving newtype (Semigroup, Monoid)
 
+-- instance Monoid (FanIn dom a) where
+--     {-# INLINE mempty #-}
+--     mempty = FanIn . Ap $ pure $ First Nothing
+
+-- instance Semigroup (FanIn dom a) where
+--     {-# INLINE (<>) #-}
+--     FanIn (Ap s1) <> FanIn (Ap s2) = FanIn . Ap $ (<>) <$> s1 <*> s2
+
 newtype AddrMap {- s -} dom = AddrMap{ addrMap :: DMap (Component {-s-}) (FanIn dom) }
     deriving newtype (Monoid)
 
 instance Semigroup (AddrMap {- s -} dom) where
+    -- {-# INLINE (<>) #-}
     AddrMap map1 <> AddrMap map2 = AddrMap $ unionWithKey (const mappend) map1 map2
 
 newtype Susp0 dom dat addr = Susp0{ unSusp0 :: Signal dom (Maybe addr) -> Signal dom (Maybe dat) }
@@ -48,8 +57,11 @@ type Addressing0 dom addr dat = RWS
     Int
 
 data Addressing dom addr dat (ts :: [Type]) a where
-    Lift :: Addressing0 dom addr dat a -> Addressing dom addr dat '[] a
+    Return :: a -> Addressing dom addr dat '[] a
     Bind :: Addressing dom addr dat ts a -> (a -> Addressing dom addr dat us b) -> Addressing dom addr dat (ts ++ us) b
+
+    Fresh :: (Typeable addr') => Addressing dom addr dat '[] (Component addr')
+    WR :: Addressing dom addr dat '[] (Signal dom (Maybe dat))
     Match :: (addr -> Maybe addr') -> Addressing dom addr' dat ts a -> Addressing dom addr dat ts a
     Connect :: Component addr -> Addressing dom addr dat '[] ()
     Tell0 :: DSum Component (Susp0 dom dat) -> Addressing dom addr dat '[] ()
@@ -64,13 +76,14 @@ data Results (ts :: [Type]) where
     NilR :: Results '[]
     ConsR :: a -> Results ts -> Results (a : ts)
 
+-- {-# INLINE concatS #-}
 concatS :: Susps dom dat ts -> Susps dom dat us -> Susps dom dat (ts ++ us)
 concatS = \case
     NilS -> id
     Cons0 x xs -> Cons0 x . concatS xs
     Cons1 x xs -> Cons1 x . concatS xs
 
-runAddressing1'
+runAddressing1
     :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe addr)
     -> Addressing dom addr dat ts a
@@ -78,46 +91,27 @@ runAddressing1'
           ( Susps dom dat ts
           , a
           )
-runAddressing1' addr = \case
-    Lift m -> do
-        x <- m
-        return (NilS, x)
+runAddressing1 addr = \case
+    Return x -> nilS $ return x
     Bind m n -> do
-        (rd1, x) <- runAddressing1' addr m
-        (rd2, y) <- runAddressing1' addr $ n x
+        (rd1, x) <- runAddressing1 addr m
+        (rd2, y) <- runAddressing1 addr $ n x
         return (concatS rd1 rd2, y)
-    Match f body -> runAddressing1' (fmap (f =<<) addr) body
-    Connect handle -> do
+    Fresh -> nilS $ Component typeRep <$> get <* modify succ
+    WR -> nilS ask
+    Match f body -> runAddressing1 (fmap (f =<<) addr) body
+    Connect handle -> nilS $ do
         tell $ AddrMap $ DMap.singleton handle $ fanInMaybe addr -- TODO: block later connections
-        return (NilS, ())
     Tell0 comp -> do
         return (Cons0 comp NilS, ())
     Tell1 comp -> do
         return (Cons1 comp NilS, ())
+  where
+    nilS act = do
+        x <- act
+        return (NilS, x)
 
-runAddressing1
-    :: (HiddenClockResetEnable dom)
-    => Signal dom (Maybe addr)
-    -> Addressing dom addr dat ts a
-    -> Addressing0 dom addr dat
-          ( DMap Component (Susp0 dom dat)
-          , a
-          )
-runAddressing1 addr = \case
-    Lift m -> do
-        x <- m
-        return (mempty, x)
-    Bind m n -> do
-        (rd1, x) <- runAddressing1 addr m
-        (rd2, y) <- runAddressing1 addr $ n x
-        return (rd1 <> rd2, y)
-    Match f body -> runAddressing1 (fmap (f =<<) addr) body
-    Connect handle -> do
-        tell $ AddrMap $ DMap.singleton handle $ fanInMaybe addr -- TODO: block later connections
-        return (mempty, ())
-    Tell0 (handle :=> susp) -> do
-        return (DMap.singleton handle susp, ())
-
+-- {-# INLINE runAddressing #-}
 runAddressing
     :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe addr)
@@ -129,27 +123,16 @@ runAddressing
        )
 runAddressing addr wr body = (join <$> firstIn rd, x, xs)
   where
-    ((susps, x), conns) = evalRWS (runAddressing1' addr body) wr 0
-    (rd, xs) = toRead' susps (addrMap conns)
+    ((susps, x), conns) = evalRWS (runAddressing1 addr body) wr 0
+    (rd, xs) = toRead susps (addrMap conns)
 
+-- {-# INLINE toRead #-}
 toRead
-    :: (HiddenClockResetEnable dom)
-    => DMap Component (Susp0 dom dat)
-    -> DMap Component (FanIn dom)
-    -> FanIn dom (Maybe dat)
-toRead susps conns = mconcat
-    [ rd
-    | h :=> (Susp0 mk) <- DMap.toList susps
-    , let addr = fromMaybe mempty $ DMap.lookup h conns
-    , let rd = gated (delay False $ isJust <$> firstIn addr) $ fanIn $ mk (firstIn addr)
-    ]
-
-toRead'
     :: forall dom dat ts. (HiddenClockResetEnable dom)
     => Susps dom dat ts
     -> DMap Component (FanIn dom)
     -> (FanIn dom (Maybe dat), Results ts)
-toRead' susps conns = go susps
+toRead susps conns = go susps
   where
     go :: Susps dom dat us -> (FanIn dom (Maybe dat), Results us)
     go = \case
@@ -169,32 +152,34 @@ toRead' susps conns = go susps
             (rd0, x) = mk (firstIn addr)
             rd = gated (delay False $ isJust <$> firstIn addr) $ fanIn rd0
 
+-- {-# INLINE readWrite #-}
 readWrite
     :: (Typeable addr')
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
     -> Addressing {- s -} dom addr dat '[a] (Component {- s -} addr')
 readWrite mkComponent = do
-    handle <- Lift $ Component typeRep <$> get <* modify succ
-    wr <- Lift ask
+    handle <- Fresh
+    wr <- WR
     Tell1 $ handle :=> Susp1 (\addr -> mkComponent addr wr)
     return handle
   where
-    return = Lift . Clash.Prelude.return
+    return = Return
     (>>=) = Bind
     (=<<) = flip (>>=)
     m >> n = Bind m (const n)
 
+-- {-# INLINE readWrite_ #-}
 readWrite_
     :: (Typeable addr')
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat)))
     -> Addressing {- s -} dom addr dat '[] (Component {- s -} addr')
 readWrite_ mkComponent = do
-    handle <- Lift $ Component typeRep <$> get <* modify succ
-    wr <- Lift ask
+    handle <- Fresh
+    wr <- WR
     Tell0 $ handle :=> Susp0(\addr -> mkComponent addr wr)
     return handle
   where
-    return = Lift . Clash.Prelude.return
+    return = Return
     (>>=) = Bind
     (=<<) = flip (>>=)
     m >> n = Bind m (const n)
@@ -202,6 +187,7 @@ readWrite_ mkComponent = do
 type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
 type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
 
+-- {-# INLINE port #-}
 port
     :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
     => Port dom addr' dat a
@@ -210,6 +196,7 @@ port mkPort = readWrite $ \addr wr ->
     let (read, x) = mkPort $ portFromAddr addr wr
     in (delay Nothing read, x)
 
+-- {-# INLINE romFromFile #-}
 romFromFile
     :: (HiddenClockResetEnable dom, 1 <= n, BitPack dat)
     => SNat n
@@ -218,6 +205,7 @@ romFromFile
 romFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     fmap (Just . unpack) $ romFilePow2 fileName (maybe 0 bitCoerce <$> addr)
 
+-- {-# INLINE ram0 #-}
 ram0
     :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, Num dat)
     => SNat n
@@ -226,22 +214,26 @@ ram0 size@SNat = readWrite_ $ \addr wr ->
     fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
 
 
+-- {-# INLINE matchAddr #-}
 matchAddr
     :: (addr -> Maybe addr')
     -> Addressing {- s -} dom addr' dat ts a
     -> Addressing {- s -} dom addr dat ts a
 matchAddr = Match
 
+-- {-# INLINE matchLeft #-}
 matchLeft
     :: Addressing {- s -} dom addr1 dat ts a
     -> Addressing {- s -} dom (Either addr1 addr2) dat ts a
 matchLeft = matchAddr $ either Just (const Nothing)
 
+-- {-# INLINE matchRight #-}
 matchRight
     :: Addressing {- s -} dom addr2 dat ts a
     -> Addressing {- s -} dom (Either addr1 addr2) dat ts a
 matchRight = matchAddr $ either (const Nothing) Just
 
+-- {-# INLINE from #-}
 from
     :: forall addr' s dom addr dat ts a. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr
@@ -255,19 +247,24 @@ from base = matchAddr $ \addr -> do
   where
     lim = fromIntegral (maxBound :: addr')
 
+-- {-# INLINE connect #-}
 connect
     :: Component {- s -} addr
     -> Addressing {- s -} dom addr dat '[] ()
 connect = Connect
 
+-- {-# INLINE fanInMaybe #-}
 fanInMaybe :: Signal dom (Maybe a) -> FanIn dom a
 fanInMaybe = FanIn . Ap . fmap First
 
+-- {-# INLINE fanIn #-}
 fanIn :: Signal dom a -> FanIn dom a
 fanIn = fanInMaybe . fmap pure
 
+-- {-# INLINE firstIn #-}
 firstIn :: FanIn dom a -> Signal dom (Maybe a)
 firstIn = fmap getFirst . getAp . getFanIn
 
+-- {-# INLINE gated #-}
 gated :: Signal dom Bool -> FanIn dom a -> FanIn dom a
 gated p sig = fanInMaybe $ mux p (firstIn sig) (pure Nothing)
