@@ -1,5 +1,7 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
+
 module RetroClash.Memory
     ( memoryMap, memoryMap_
 
@@ -16,7 +18,7 @@ module RetroClash.Memory
     , tag
     ) where
 
-import Clash.Prelude
+import Clash.Prelude hiding (Exp, lift)
 import RetroClash.Utils
 import RetroClash.Port
 import Control.Arrow (first, second)
@@ -24,196 +26,272 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
 
-import Data.Kind
-import Data.Dependent.Map as DMap
-import Data.GADT.Compare
-import Type.Reflection
+import Control.Monad.State
 
-type RAM dom addr dat = Signal dom addr -> Signal dom (Maybe (addr, dat)) -> Signal dom dat
-type ROM dom addr dat = Signal dom addr ->                                   Signal dom dat
-type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
-type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
+import Data.Map as Map
+import Data.List as L
+import Data.Function (on)
 
-packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
-packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
+import Language.Haskell.TH hiding (Type)
+import qualified Language.Haskell.TH.Syntax as TH
 
-data Component s (addr :: Type) = Component (TypeRep addr) Int
+data Handle s addr = Handle Int
 
-instance GEq (Component s) where
-    geq (Component a _) (Component b _) = geq a b
-
-instance GCompare (Component s) where
-    gcompare (Component a _) (Component b _) = gcompare a b
-
-newtype FanIn dom a = FanIn{ getFanIn :: Signal dom `Ap` First a }
-    deriving newtype (Semigroup, Monoid)
-
-newtype AddrMap s dom = AddrMap{ addrMap :: DMap (Component s) (FanIn dom) }
-    deriving newtype (Monoid)
-
-instance Semigroup (AddrMap s dom) where
-    AddrMap map1 <> AddrMap map2 = AddrMap $ unionWithKey (const mappend) map1 map2
-
-newtype Addressing s dom dat addr a = Addressing
-    { unAddressing :: RWS
-          (FanIn dom addr, Signal dom (Maybe dat), AddrMap s dom)
-          (FanIn dom (Maybe dat), AddrMap s dom)
-          Int
+newtype Addressing s addr a = Addressing
+    { runAddressing :: RWS
+          (Exp)                                  -- wr
+          ([(Exp -> ExpQ, Bool)], [(Int, ExpQ)])  -- (components, matchers)
+          Int                                    -- component key supply
           a
     }
     deriving newtype (Functor, Applicative, Monad)
 
-memoryMap
-    :: Signal dom (Maybe addr)
-    -> Signal dom (Maybe dat)
-    -> (forall s. Addressing s dom dat addr a)
-    -> (Signal dom (Maybe dat), a)
-memoryMap addr wr body = (join <$> firstIn read, x)
-  where
-    (x, (read, conns)) = evalRWS (unAddressing body) (fanInMaybe addr, wr, conns) 0
+listMap :: (Ord k) => [(k, v)] -> Map.Map k [v]
+listMap =
+    Map.fromList .
+    fmap (\ kvs@((k, _):_) -> (k, fmap snd kvs)) .
+    groupBy ((==) `on` fst) .
+    sortBy (compare `on` fst)
 
-memoryMap_
-    :: Signal dom (Maybe addr)
-    -> Signal dom (Maybe dat)
-    -> (forall s. Addressing s dom dat addr ())
-    -> Signal dom (Maybe dat)
-memoryMap_ addr wr body = fst $ memoryMap addr wr body
+runMatchers :: [(Int, ExpQ)] -> Exp -> Q ([Dec], Map.Map Int [Exp])
+runMatchers matchers addr0 = do
+    (addrs, decs) <- fmap L.unzip $ flip evalStateT addr0 $ forM matchers $ \(i, matcher) -> do
+        addr <- get
+        nm <- lift $ newName "addrIn"
+        nm' <- lift $ newName "addrOut"
+        put $ VarE nm'
+        decs <- lift
+            [d|
+             $(varP nm) = $matcher $(pure addr)
+             $(varP nm') = mux (isJust <$> $(varE nm)) (pure Nothing) $(pure addr)
+            |]
+        return ((i, VarE nm), decs)
 
-conduit
-    :: (Typeable addr', HiddenClockResetEnable dom)
-    => Signal dom (Maybe dat)
-    -> Addressing s dom dat addr (Component s addr', Signal dom (Maybe addr'), Signal dom (Maybe dat))
-conduit read = do
-    (component, (addr, wr)) <- readWrite $ \addr wr -> (read, (addr, wr))
-    return (component, addr, wr)
+    return (mconcat decs, listMap addrs)
 
-readWrite
-    :: (HiddenClockResetEnable dom, Typeable addr')
-    => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
-    -> Addressing s dom dat addr (Component s addr', a)
-readWrite mkComponent = Addressing $ do
-    component <- Component typeRep <$> get <* modify succ
-    (_, wr, addrs) <- ask
-    let addr = firstIn . fromMaybe mempty $ DMap.lookup component (addrMap addrs)
-        selected = isJust <$> addr
-    let (read, x) = mkComponent addr wr
-    tell (gated (delay False selected) (fanIn read), mempty)
-    return (component, x)
+data Resolved = Resolved
+    { outs :: Int -> Exp
+    , addrs :: Int -> Exp
+    , wr :: Exp
+    }
 
-readWrite_
-    :: (HiddenClockResetEnable dom, Typeable addr')
-    => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> Signal dom (Maybe dat))
-    -> Addressing s dom dat addr (Component s addr')
-readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr -> (mkComponent addr wr, ())
+class Backpane a where
+    backpane :: a -> Resolved -> ExpQ
 
-romFromVec
-    :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, KnownNat n)
-    => SNat (n + k)
-    -> Vec n dat
-    -> Addressing s dom dat addr (Component s (Index (n + k)))
-romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
-    fmap Just $ rom xs (maybe 0 bitCoerce <$> addr)
+instance (Backpane a1, Backpane a2) => Backpane (a1, a2) where
+    backpane (x1, x2) env = [| ($(backpane x1 env), $(backpane x2 env)) |]
 
-romFromFile
-    :: (HiddenClockResetEnable dom, 1 <= n, BitPack dat)
-    => SNat n
-    -> FilePath
-    -> Addressing s dom dat addr (Component s (Index n))
-romFromFile size@SNat fileName = readWrite_ $ \addr _wr ->
-    fmap (Just . unpack) $ romFilePow2 fileName (maybe 0 bitCoerce <$> addr)
+instance (Backpane a1, Backpane a2, Backpane a3) => Backpane (a1, a2, a3) where
+    backpane (x1, x2, x3) env = [| ($(backpane x1 env), $(backpane x2 env), $(backpane x3 env)) |]
 
-ram0
-    :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, Num dat)
-    => SNat n
-    -> Addressing s dom dat addr (Component s (Index n))
-ram0 size@SNat = readWrite_ $ \addr wr ->
-      fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
+instance Backpane () where
+    backpane _ _ = [|()|]
 
-ramFromFile
-    :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, BitPack dat)
-    => SNat n
-    -> FilePath
-    -> Addressing s dom dat addr (Component s (Index n))
-ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
-    fmap (Just . unpack) $ blockRamFile size fileName (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> (fmap pack <$> wr))
+data Out = Out Int
+    deriving Show
 
-port
-    :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
-    => Port dom addr' dat a
-    -> Addressing s dom dat addr (Component s addr', a)
-port mkPort = readWrite $ \addr wr ->
-    let (read, x) = mkPort $ portFromAddr addr wr
-    in (delay Nothing read, x)
+instance Backpane Out where
+    backpane x@(Out i) = pure . ($ i) . outs
 
-port_
-    :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
-    => Port_ dom addr' dat
-    -> Addressing s dom dat addr (Component s addr')
-port_ mkPort = readWrite_ $ \addr wr ->
-    let read = mkPort $ portFromAddr addr wr
-    in (delay Nothing read)
+data Addr = Addr Int
+    deriving Show
+
+instance Backpane Addr where
+    backpane x@(Addr i) = pure . ($ i) . addrs
+
+data WR = WR
+    deriving Show
+
+instance Backpane WR where
+    backpane WR = pure . wr
+
+compile
+    :: forall addr dom a. Backpane a
+    => (forall s. Addressing s addr a)
+    -> Q (ExpQ -> ExpQ, [Dec], ExpQ, ExpQ)
+compile addressing = do
+    addr <- newName "addr"
+    wr <- newName "wr"
+
+    let (x, (components, matchers)) = evalRWS (runAddressing addressing) (VarE wr) 0
+
+    (addrDecs, addrs) <- runMatchers matchers $ VarE addr
+    muxs <- forM addrs $ \addrs -> do
+        mux <- newName "muxAddr"
+        return (mux, [d| $(varP mux) = muxA $(ListE <$> pure addrs) |])
+    noMux <- [|pure Nothing|]
+
+    (rdDecs, rds, backpaneVars) <- fmap L.unzip3 $ forM (L.zip [0..] components) $ \(i, (component, periph)) -> do
+        rd <- newName "rd"
+        comp <- component $ maybe (error "muxs") (VarE . fst) $ Map.lookup i muxs
+        (dec, x) <- case periph of
+            False -> do
+                dec <- [d| $(varP rd) = $(pure comp) |]
+                return (dec, Nothing)
+            True -> do
+                x <- newName "x"
+                dec <- [d| ($(varP rd), $(varP x)) = $(pure comp) |]
+                return (dec, Just $ VarE x)
+        return (dec, VarE rd, x)
+
+    muxDecs <- mconcat <$> mapM snd (Map.elems muxs)
+    unit <- [|()|]
+
+    let decs = addrDecs <> mconcat rdDecs <> muxDecs
+        resolved = Resolved
+            { outs =
+                   let backpaneMap = Map.fromList $ L.zip [0..] backpaneVars
+                   in \i -> fromMaybe unit . join $ Map.lookup i backpaneMap
+            , addrs = \i -> maybe noMux (VarE . fst) $ Map.lookup i muxs
+            , wr = VarE wr
+            }
+        wrapper body = [| \ $(varP addr) $(varP wr) -> $body |]
+        rd = [| muxA $(ListE <$> pure rds) |]
+
+    return (wrapper, decs, [| muxA $(ListE <$> pure rds) |], backpane x resolved)
+
+memoryMap :: forall addr a. Backpane a => ExpQ -> ExpQ -> (forall s. Addressing s addr a) -> ExpQ
+memoryMap addr wr addressing = do
+    (wrapper, decs, rd, x) <- compile addressing
+    [| $(wrapper $ LetE decs <$> [| ($rd, $x) |]) $addr $wr |]
+
+memoryMap_ :: forall addr. ExpQ -> ExpQ -> (forall s. Addressing s addr ()) -> ExpQ
+memoryMap_ addr wr addressing = do
+    (wrapper, decs, rd, _) <- compile addressing
+    [| $(wrapper $ LetE decs <$> rd) $addr $wr |]
+
+-- packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
+-- packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
 
 matchAddr
-    :: (addr -> Maybe addr')
-    -> Addressing s dom dat addr' a
-    -> Addressing s dom dat addr a
-matchAddr match body = Addressing $ rws $ \(addr, wr, addrs) s ->
-  let addr' = fanInMaybe . fmap (match =<<) . firstIn $ addr
-      (x, s', (read, components)) = runRWS (unAddressing body) (addr', wr, addrs) s
-  in (x, s', (read, components))
+    :: ExpQ
+    -> Addressing s addr' a
+    -> Addressing s addr a
+matchAddr match body = Addressing $ rws $ \wr s ->
+    let (x, s', (components, matchers)) = runRWS (runAddressing body) wr s
+    in (x, s', (components, fmap (fmap restrict) matchers))
+  where
+    restrict matcher = [| $matcher . fmap ($match =<<) |]
 
-gated :: Signal dom Bool -> FanIn dom a -> FanIn dom a
-gated p sig = fanInMaybe $ mux p (firstIn sig) (pure Nothing)
+readWrite
+    :: (Exp -> Exp -> ExpQ)
+    -> Addressing s addr (Handle s addr', Out)
+readWrite component = Addressing $ do
+    h@(Handle i) <- Handle <$> get <* modify succ
+    wr <- ask
+    tell ([(\addr -> component addr wr, True)], mempty)
+    return (h, Out i)
+
+conduit
+    :: forall addr' s addr. ()
+    => ExpQ
+    -> Addressing s addr (Handle s addr', Addr, WR)
+conduit mkConduit = Addressing $ do
+    h@(Handle i) <- Handle <$> get <* modify succ
+    wr <- ask
+    tell ([(\addr -> mkConduit, False)], mempty)
+    return (h, Addr i, WR)
+
+readWrite_
+    :: (Exp -> Exp -> ExpQ)
+    -> Addressing s addr (Handle s addr')
+readWrite_ component = Addressing $ do
+    h <- Handle <$> get <* modify succ
+    wr <- ask
+    tell ([(\addr -> component addr wr, False)], mempty)
+    return h
+
+
+romFromVec
+    :: (1 <= n)
+    => SNat n
+    -> ExpQ
+    -> Addressing s addr (Handle s (Index n))
+romFromVec size@SNat xs = readWrite_ $ \(pure -> addr) _wr ->
+    [| fmap Just $ rom $xs (maybe 0 bitCoerce <$> $addr) |]
+
+romFromFile
+    :: (1 <= n)
+    => SNat n
+    -> FilePath
+    -> Addressing s addr (Handle s (Index n))
+romFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) _wr ->
+    [| fmap (Just . unpack) $ romFilePow2 fileName (maybe 0 bitCoerce <$> $addr) |]
+
+ram0
+    :: (1 <= n)
+    => SNat n
+    -> Addressing s addr (Handle s (Index n))
+ram0 size@SNat = readWrite_ $ \(pure -> addr) (pure -> wr) ->
+    [| fmap Just $ blockRam1 ClearOnReset $(TH.lift size) 0 (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
+
+ramFromFile
+    :: (1 <= n)
+    => SNat n
+    -> ExpQ
+    -> Addressing s addr (Handle s (Index n))
+ramFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) (pure -> wr) ->
+    [| fmap (Just . unpack) $ blockRamFile size $fileName (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr)) |]
+
+port
+    :: forall addr' a s addr. ()
+    => ExpQ
+    -> Addressing s addr (Handle s addr', Out)
+port mkPort = readWrite $ \(pure -> addr) (pure -> wr) ->
+  [| let (read, x) = $mkPort $ portFromAddr $addr $wr
+     in (delay Nothing read, x) |]
+
+port_
+    :: forall addr' s addr. ()
+    => ExpQ
+    -> Addressing s addr (Handle s addr')
+port_ mkPort = readWrite_ $ \(pure -> addr) (pure -> wr) ->
+  [| let read = $mkPort $ portFromAddr $addr $wr in delay Nothing read |]
 
 tag
-    :: addr'
-    -> Addressing s dom dat (addr', addr) a
-    -> Addressing s dom dat addr a
-tag t = matchAddr $ \addr -> Just (t, addr)
+    :: (Lift addr')
+    => addr'
+    -> Addressing s (addr', addr) a
+    -> Addressing s addr a
+tag t = matchAddr [| \addr -> ($(TH.lift t), addr) |]
 
 matchLeft
-    :: Addressing s dom dat addr1 a
-    -> Addressing s dom dat (Either addr1 addr2) a
-matchLeft = matchAddr $ either Just (const Nothing)
+    :: Addressing s addr1 a
+    -> Addressing s (Either addr1 addr2) a
+matchLeft = matchAddr [| either Just (const Nothing) |]
 
 matchRight
-    :: Addressing s dom dat addr2 a
-    -> Addressing s dom dat (Either addr1 addr2) a
-matchRight = matchAddr $ either (const Nothing) Just
+    :: Addressing s addr2 a
+    -> Addressing s (Either addr1 addr2) a
+matchRight = matchAddr [| either (const Nothing) Just |]
 
 override
-    :: Signal dom (Maybe dat)
-    -> Addressing s dom dat addr a
-    -> Addressing s dom dat addr a
-override sig = Addressing . censor (first $ mappend sig') . unAddressing
-  where
-    sig' = gated (isJust <$> sig) (fanIn sig)
+    :: ExpQ
+    -> Addressing s addr a
+    -> Addressing s addr a
+override sig body = Addressing $ do
+    modify succ
+    tell ([(\_addr -> sig, False)], [])
+    runAddressing body
 
 from
-    :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr')
+    :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
     => addr
-    -> Addressing s dom dat addr' a
-    -> Addressing s dom dat addr a
-from base = matchAddr $ \addr -> do
+    -> Addressing s addr' a
+    -> Addressing s addr a
+from base = matchAddr [| \addr -> do
     guard $ addr >= base
     let offset = addr - base
-    guard $ offset <= lim
-    return $ fromIntegral offset
+    guard $ offset <= $lim
+    let the :: a -> a -> a
+        the _ x = x
+        fromIntegral' = the $(TH.lift (fromIntegral 0 :: addr')) . fromIntegral
+    return (fromIntegral' offset) |]
   where
-    lim = fromIntegral (maxBound :: addr')
+    lim = TH.lift $ fromIntegral @addr' @addr maxBound
 
 connect
-    :: Component s addr
-    -> Addressing s dom dat addr ()
-connect component@(Component _ i) = Addressing $ do
-    (addr, _, _) <- ask
-    tell (mempty, AddrMap $ DMap.singleton component addr)
-
-firstIn :: FanIn dom a -> Signal dom (Maybe a)
-firstIn = fmap getFirst . getAp . getFanIn
-
-fanInMaybe :: Signal dom (Maybe a) -> FanIn dom a
-fanInMaybe = FanIn . Ap . fmap First
-
-fanIn :: Signal dom a -> FanIn dom a
-fanIn = fanInMaybe . fmap pure
+    :: Handle s addr
+    -> Addressing s addr ()
+connect (Handle i) = Addressing $ do
+    tell (mempty, [(i, [|id|])])

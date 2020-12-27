@@ -15,8 +15,8 @@ dependencies:
   - transformers
   - barbies
   - lens
-  - dependent-map
-  - dependent-sum
+  - containers
+  - template-haskell
 
 source-dirs:
   - src
