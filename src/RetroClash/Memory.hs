@@ -23,7 +23,7 @@ import Control.Monad
 import Control.Monad.RWS
 
 import Data.Kind
-import Data.Dependent.Map as DMap
+import RetroClash.Internal.DAssoc as DMap
 import Data.GADT.Compare
 import Type.Reflection
 
@@ -35,7 +35,8 @@ type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal do
 packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
 packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
 
-data Component s (addr :: Type) = Component (TypeRep addr) Int
+type Key = Int
+data Component s (addr :: Type) = Component (TypeRep addr) Key
 
 instance GEq (Component s) where
     geq (Component a _) (Component b _) = geq a b
@@ -56,7 +57,7 @@ newtype Addressing s dom dat addr a = Addressing
     { unAddressing :: RWS
           (FanIn dom addr, Signal dom (Maybe dat), AddrMap s dom)
           (FanIn dom (Maybe dat), AddrMap s dom)
-          Int
+          Key
           a
     }
     deriving newtype (Functor, Applicative, Monad)
@@ -117,7 +118,7 @@ ram0
     => SNat n
     -> Addressing s dom dat addr (Component s (Index n))
 ram0 size@SNat = readWrite_ $ \addr wr ->
-      fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
+    fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
 
 port
     :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
@@ -140,9 +141,8 @@ matchAddr
     -> Addressing s dom dat addr' a
     -> Addressing s dom dat addr a
 matchAddr match body = Addressing $ rws $ \(addr, wr, addrs) s ->
-  let addr' = fanInMaybe . fmap (match =<<) . firstIn $ addr
-      (x, s', (read, components)) = runRWS (unAddressing body) (addr', wr, addrs) s
-  in (x, s', (read, components))
+    let addr' = fanInMaybe . fmap (match =<<) . firstIn $ addr
+    in runRWS (unAddressing body) (addr', wr, addrs) s
 
 gated :: Signal dom Bool -> FanIn dom a -> FanIn dom a
 gated p sig = fanInMaybe $ mux p (firstIn sig) (pure Nothing)
@@ -172,7 +172,7 @@ override sig = Addressing . censor (first $ mappend sig') . unAddressing
     sig' = gated (isJust <$> sig) (fanIn sig)
 
 from
-    :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr')
+    :: forall addr' dat addr a dom s. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr
     -> Addressing s dom dat addr' a
     -> Addressing s dom dat addr a
@@ -187,7 +187,7 @@ from base = matchAddr $ \addr -> do
 connect
     :: Component s addr
     -> Addressing s dom dat addr ()
-connect component@(Component _ i) = Addressing $ do
+connect component = Addressing $ do
     (addr, _, _) <- ask
     tell (mempty, AddrMap $ DMap.singleton component addr)
 
