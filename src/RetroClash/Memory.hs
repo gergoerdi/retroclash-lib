@@ -163,6 +163,9 @@ memoryMap_ addr wr addressing = do
 -- packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
 -- packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
 
+mask :: (Exp -> ExpQ) -> (Exp -> ExpQ)
+mask body addr = [|mux (delay True $ isNothing <$> $(pure addr)) (pure Nothing) $(body addr) |]
+
 matchAddr
     :: ExpQ
     -> Addressing s addr' a
@@ -179,7 +182,7 @@ readWrite
 readWrite component = Addressing $ do
     h@(Handle i) <- Handle <$> get <* modify succ
     wr <- ask
-    tell ([(\addr -> component addr wr, True)], mempty)
+    tell ([(mask $ \addr -> component addr wr, True)], mempty)
     return (h, Out i)
 
 conduit
@@ -189,7 +192,7 @@ conduit
 conduit mkConduit = Addressing $ do
     h@(Handle i) <- Handle <$> get <* modify succ
     wr <- ask
-    tell ([(\addr -> mkConduit, False)], mempty)
+    tell ([(mask $ \addr -> mkConduit, False)], mempty)
     return (h, Addr i, WR)
 
 readWrite_
@@ -198,7 +201,7 @@ readWrite_
 readWrite_ component = Addressing $ do
     h <- Handle <$> get <* modify succ
     wr <- ask
-    tell ([(\addr -> component addr wr, False)], mempty)
+    tell ([(mask $ \addr -> component addr wr, False)], mempty)
     return h
 
 
