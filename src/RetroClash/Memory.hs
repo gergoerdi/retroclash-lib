@@ -273,8 +273,8 @@ override
     -> Addressing s addr a
     -> Addressing s addr a
 override sig body = Addressing $ do
-    modify succ
-    tell ([(\_addr -> sig, False)], [])
+    i <- get <* modify succ
+    tell ([(\_addr -> sig, False)], [(i, [|\_addr -> $sig |])])
     runAddressing body
 
 from
