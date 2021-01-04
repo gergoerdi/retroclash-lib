@@ -70,9 +70,9 @@ runMatchers matchers addr0 = do
     return (mconcat decs, listMap addrs)
 
 data Resolved = Resolved
-    { outs :: Int -> Exp
-    , addrs :: Int -> Exp
-    , wr :: Exp
+    { outs :: Int -> ExpQ
+    , addrs :: Int -> ExpQ
+    , wrs :: Int -> ExpQ
     }
 
 class Backpane a where
@@ -91,19 +91,19 @@ data Out = Out Int
     deriving Show
 
 instance Backpane Out where
-    backpane x@(Out i) = pure . ($ i) . outs
+    backpane x@(Out i) = ($ i) . outs
 
 data Addr = Addr Int
     deriving Show
 
 instance Backpane Addr where
-    backpane x@(Addr i) = pure . ($ i) . addrs
+    backpane (Addr i) = ($ i) . addrs
 
-data WR = WR
+data WR = WR Int
     deriving Show
 
 instance Backpane WR where
-    backpane WR = pure . wr
+    backpane (WR i) = ($ i) . wrs
 
 compile
     :: forall addr dom a. Backpane a
@@ -135,15 +135,15 @@ compile addressing = do
         return (dec, VarE rd, x)
 
     muxDecs <- mconcat <$> mapM snd (Map.elems muxs)
-    unit <- [|()|]
 
     let decs = addrDecs <> mconcat rdDecs <> muxDecs
+        addrs i = pure $ maybe noMux (VarE . fst) $ Map.lookup i muxs
         resolved = Resolved
             { outs =
                    let backpaneMap = Map.fromList $ L.zip [0..] backpaneVars
-                   in \i -> fromMaybe unit . join $ Map.lookup i backpaneMap
-            , addrs = \i -> maybe noMux (VarE . fst) $ Map.lookup i muxs
-            , wr = VarE wr
+                   in \i -> maybe [|()|] pure . join $ Map.lookup i backpaneMap
+            , addrs = addrs
+            , wrs = \i -> let addr = addrs i in [| mux (isJust <$> $addr) $(varE wr) (pure Nothing) |]
             }
         wrapper body = [| \ $(varP addr) $(varP wr) -> $body |]
         rd = [| muxA $(ListE <$> pure rds) |]
@@ -193,7 +193,7 @@ conduit mkConduit = Addressing $ do
     h@(Handle i) <- Handle <$> get <* modify succ
     wr <- ask
     tell ([(mask $ \addr -> mkConduit, False)], mempty)
-    return (h, Addr i, WR)
+    return (h, Addr i, WR i)
 
 readWrite_
     :: (Exp -> Exp -> ExpQ)
