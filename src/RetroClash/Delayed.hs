@@ -1,9 +1,11 @@
 {-# LANGUAGE RecordWildCards, RankNTypes #-}
 module RetroClash.Delayed
     ( delayVGA
+
     , delayedRom
     , delayedRam
     , delayedBlockRam1
+    , sharedDelayed
 
     , delayedRegister
     , liftD
@@ -13,7 +15,10 @@ module RetroClash.Delayed
 
 import Clash.Prelude
 import RetroClash.VGA
+import RetroClash.Utils (enable)
 import Data.Function (fix)
+import Data.Maybe
+import Control.Monad (mplus)
 
 delayVGA
     :: (KnownNat d, KnownNat r, KnownNat g, KnownNat b)
@@ -84,3 +89,24 @@ liftD2
     => (forall dom'. (HiddenClockResetEnable dom') => Signal dom' a -> Signal dom' b -> Signal dom' c)
     -> DSignal dom d a -> DSignal dom d b -> DSignal dom d c
 liftD2 f x y = liftD (uncurry f . unbundle) $ liftA2 (,) x y
+
+sharedDelayed
+    :: (KnownNat k, HiddenClockResetEnable dom)
+    => (DSignal dom d addr -> DSignal dom d (Maybe wr) -> DSignal dom (d + k) a)
+    -> Vec (n + 1) (DSignal dom d (Maybe addr), DSignal dom d (Maybe wr))
+    -> Vec (n + 1) (DSignal dom (d + k) (Maybe a))
+sharedDelayed ram lines = reads
+  where
+    (sels, addrs, wrs) = unzip3 . snd $ mapAccumL step (pure True) lines
+      where
+        step en (addr, wr) =
+            let en' = en .&&. not <$> sel
+                addr' = mux en addr (pure Nothing)
+                sel = isJust <$> addr'
+            in (en', (sel, addr', wr))
+
+    addr = fromMaybe (errorX "no address") <$> fold (liftA2 mplus) addrs
+    wr = foldr (\(sel, wr) -> mux sel wr) (pure Nothing) (zip sels wrs)
+
+    read = ram addr wr
+    reads = map (\sel -> enable (delayI False sel) read) sels
