@@ -53,7 +53,10 @@ module RetroClash.Utils
     , guardA
     , muxA
     , muxMaybe
+
     , packWrite
+    , noWrite
+    , withWrite
     ) where
 
 import Clash.Prelude
@@ -236,6 +239,12 @@ guardA en x = mux en x (pure empty)
 
 packWrite :: addr -> Maybe val -> Maybe (addr, val)
 packWrite addr val = (addr,) <$> val
+
+withWrite :: (Applicative f) => f (Maybe addr) -> f (Maybe wr) -> f (Maybe (addr, Maybe wr))
+withWrite = liftA2 $ \addr wr -> (,wr) <$> addr
+
+noWrite :: (Applicative f) => f (Maybe addr) -> f (Maybe (addr, Maybe wr))
+noWrite addr = addr `withWrite` pure Nothing
 
 muxA :: (Foldable t, Alternative m, Applicative f) => t (f (m a)) -> f (m a)
 muxA = F.foldr (liftA2 (<|>)) (pure empty)
