@@ -15,7 +15,7 @@ module RetroClash.Delayed
 
 import Clash.Prelude
 import RetroClash.VGA
-import RetroClash.Utils (enable)
+import RetroClash.Utils (enable, guardA)
 import Data.Function (fix)
 import Data.Maybe
 import Control.Monad (mplus)
@@ -92,21 +92,16 @@ liftD2 f x y = liftD (uncurry f . unbundle) $ liftA2 (,) x y
 
 sharedDelayed
     :: (KnownNat k, HiddenClockResetEnable dom)
-    => (DSignal dom d addr -> DSignal dom d (Maybe wr) -> DSignal dom (d + k) a)
-    -> Vec (n + 1) (DSignal dom d (Maybe addr), DSignal dom d (Maybe wr))
+    => (DSignal dom d addr -> DSignal dom (d + k) a)
+    -> Vec (n + 1) (DSignal dom d (Maybe addr))
     -> Vec (n + 1) (DSignal dom (d + k) (Maybe a))
-sharedDelayed ram lines = reads
+sharedDelayed mem reqs = reads
   where
-    (sels, addrs, wrs) = unzip3 . snd $ mapAccumL step (pure True) lines
+    addrs = snd $ mapAccumL step (pure True) reqs
       where
-        step en (addr, wr) =
-            let en' = en .&&. not <$> sel
-                addr' = mux en addr (pure Nothing)
-                sel = isJust <$> addr'
-            in (en', (sel, addr', wr))
+        step en addr = (en .&&. isNothing <$> addr, guardA en addr)
 
-    addr = fromMaybe (errorX "no address") <$> fold (liftA2 mplus) addrs
-    wr = foldr (\(sel, wr) -> mux sel wr) (pure Nothing) (zip sels wrs)
+    addr = fromJustX <$> fold (liftA2 mplus) addrs
 
-    read = ram addr wr
-    reads = map (\sel -> enable (delayI False sel) read) sels
+    read = mem addr
+    reads = map (\addr -> enable (delayI False $ isJust <$> addr) read) addrs
