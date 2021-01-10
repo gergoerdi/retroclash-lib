@@ -50,7 +50,9 @@ module RetroClash.Utils
     , mooreStateB
 
     , enable
+    , guardA
     , muxA
+    , muxMaybe
     , packWrite
     ) where
 
@@ -229,11 +231,17 @@ mooreStateB step out s0 = unbundle . mooreState step out s0 . bundle
 enable :: (Applicative f) => f Bool -> f a -> f (Maybe a)
 enable en x = mux en (Just <$> x) (pure Nothing)
 
+guardA :: (Applicative f, Alternative m) => f Bool -> f (m a) -> f (m a)
+guardA en x = mux en x (pure empty)
+
 packWrite :: addr -> Maybe val -> Maybe (addr, val)
 packWrite addr val = (addr,) <$> val
 
 muxA :: (Foldable t, Alternative m, Applicative f) => t (f (m a)) -> f (m a)
 muxA = F.foldr (liftA2 (<|>)) (pure empty)
+
+muxMaybe :: (Applicative f) => f (Maybe a) -> f a -> f a
+muxMaybe = liftA2 (flip fromMaybe)
 
 withStart :: (HiddenClockResetEnable dom) => a -> Signal dom a -> Signal dom a
 withStart x0 = mux (register True $ pure False) (pure x0)
