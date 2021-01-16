@@ -216,10 +216,10 @@ romFromVec size@SNat xs = readWrite_ $ \(pure -> addr) _wr ->
 romFromFile
     :: (1 <= n)
     => SNat n
-    -> FilePath
+    -> ExpQ
     -> Addressing s addr (Handle s (Index n))
 romFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) _wr ->
-    [| fmap (Just . unpack) $ romFilePow2 fileName (maybe 0 bitCoerce <$> $addr) |]
+    [| fmap (Just . unpack) $ romFilePow2 $fileName (maybe 0 bitCoerce <$> $addr) |]
 
 ram0
     :: (1 <= n)
