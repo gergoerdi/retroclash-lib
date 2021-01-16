@@ -226,7 +226,7 @@ ram0
     => SNat n
     -> Addressing s addr (Handle s (Index n))
 ram0 size@SNat = readWrite_ $ \(pure -> addr) (pure -> wr) ->
-    [| fmap Just $ blockRam1 ClearOnReset $(TH.lift size) 0 (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
+    [| fmap Just $ blockRamU ClearOnReset $(TH.lift size) (const 0) (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
 
 ramFromFile
     :: (1 <= n)
