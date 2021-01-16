@@ -4,7 +4,9 @@ module RetroClash.Memory
     ( memoryMap, memoryMap_
 
     , conduit, readWrite, readWrite_
-    , romFromFile, ram0, port, port_
+    , romFromVec, romFromFile
+    , ram0, ramFromFile
+    , port, port_
     , connect
 
     , override
@@ -104,6 +106,14 @@ readWrite_
     -> Addressing s dom dat addr (Component s addr')
 readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr -> (mkComponent addr wr, ())
 
+romFromVec
+    :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, KnownNat n)
+    => SNat (n + k)
+    -> Vec n dat
+    -> Addressing s dom dat addr (Component s (Index (n + k)))
+romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
+    fmap Just $ rom xs (maybe 0 bitCoerce <$> addr)
+
 romFromFile
     :: (HiddenClockResetEnable dom, 1 <= n, BitPack dat)
     => SNat n
@@ -118,6 +128,14 @@ ram0
     -> Addressing s dom dat addr (Component s (Index n))
 ram0 size@SNat = readWrite_ $ \addr wr ->
       fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
+
+ramFromFile
+    :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, BitPack dat)
+    => SNat n
+    -> FilePath
+    -> Addressing s dom dat addr (Component s (Index n))
+ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
+    fmap (Just . unpack) $ blockRamFile size fileName (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> (fmap pack <$> wr))
 
 port
     :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
