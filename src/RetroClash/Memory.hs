@@ -256,7 +256,7 @@ tag
     => addr'
     -> Addressing s (addr', addr) a
     -> Addressing s addr a
-tag t = matchAddr [| \addr -> ($(TH.lift t), addr) |]
+tag t = matchAddr [| \addr -> Just ($(TH.lift t), addr) |]
 
 matchLeft
     :: Addressing s addr1 a
