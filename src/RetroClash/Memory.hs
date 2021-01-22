@@ -177,7 +177,8 @@ matchAddr match body = Addressing $ rws $ \wr s ->
     restrict matcher = [| $matcher . fmap ($match =<<) |]
 
 readWrite
-    :: (Exp -> Exp -> ExpQ)
+    :: forall addr' s addr. ()
+    => (Exp -> Exp -> ExpQ)
     -> Addressing s addr (Handle s addr', Out)
 readWrite component = Addressing $ do
     h@(Handle i) <- Handle <$> get <* modify succ
@@ -196,7 +197,8 @@ conduit mkConduit = Addressing $ do
     return (h, Addr i, WR i)
 
 readWrite_
-    :: (Exp -> Exp -> ExpQ)
+    :: forall addr' s addr. ()
+    => (Exp -> Exp -> ExpQ)
     -> Addressing s addr (Handle s addr')
 readWrite_ component = Addressing $ do
     h <- Handle <$> get <* modify succ
