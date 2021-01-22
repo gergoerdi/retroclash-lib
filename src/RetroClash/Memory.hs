@@ -166,6 +166,9 @@ memoryMap_ addr wr addressing = do
 mask :: (Exp -> ExpQ) -> (Exp -> ExpQ)
 mask body addr = [|mux (delay True $ isNothing <$> $(pure addr)) (pure Nothing) $(body addr) |]
 
+mask2 :: (Exp -> ExpQ) -> (Exp -> ExpQ)
+mask2 body addr = [| let (rd, x) = $(body addr) in (mux (delay True $ isNothing <$> $(pure addr)) (pure Nothing) rd, x) |]
+
 matchAddr
     :: ExpQ
     -> Addressing s addr' a
@@ -183,7 +186,7 @@ readWrite
 readWrite component = Addressing $ do
     h@(Handle i) <- Handle <$> get <* modify succ
     wr <- ask
-    tell ([(mask $ \addr -> component addr wr, True)], mempty)
+    tell ([(mask2 $ \addr -> component addr wr, True)], mempty)
     return (h, Out i)
 
 conduit
