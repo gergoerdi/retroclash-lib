@@ -288,12 +288,13 @@ from base = matchAddr [| \addr -> do
     guard $ addr >= base
     let offset = addr - base
     guard $ offset <= $lim
-    let the :: a -> a -> a
-        the _ x = x
-        fromIntegral' = the $(TH.lift (fromIntegral 0 :: addr')) . fromIntegral
+    let fromIntegral' = the $(TH.lift (fromIntegral 0 :: addr')) . fromIntegral
     return (fromIntegral' offset) |]
   where
     lim = TH.lift $ fromIntegral @addr' @addr maxBound
+
+the :: a -> a -> a
+the _ x = x
 
 connect
     :: Handle s addr
