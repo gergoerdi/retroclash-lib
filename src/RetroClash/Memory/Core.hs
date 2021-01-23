@@ -110,15 +110,12 @@ gated p sig = fanInMaybe $ mux p (firstIn sig) (pure Nothing)
 override
     :: (Show dat)
     => Signal dom (Maybe dat)
-    -> Addressing s dom dat addr a
-    -> Addressing s dom dat addr a
-override sig body = Addressing $ do
+    -> Addressing s dom dat addr ()
+override sig = Addressing $ do
     (addr, _, _, _) <- ask
     let selected = isJust <$> firstIn addr
         sig' = gated (selected .&&. isJust <$> sig) (fanIn sig)
     tell (sig', mempty, mempty)
-    -- local (\(addr, wr, reads, addrs) -> (gated (isNothing <$> sig) addr, wr, reads, addrs)) $ unAddressing body
-    unAddressing body
 
 connect
     :: (HiddenClockResetEnable dom)
