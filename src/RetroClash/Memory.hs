@@ -55,7 +55,7 @@ type Read = ExpQ
 newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
           (Exp, Matcher, Name)                                     -- (wr, matcher, addr)
-          ([Component], [(Name, Matcher)], [(Name, Connection)], [ExpQ])   -- (components, matcher binds, connections, reads)
+          ([(Name, Component)], [(Name, Matcher)], [(Name, Connection)], [ExpQ])   -- (components, matcher binds, connections, reads)
           ()
           Q
           a
@@ -112,14 +112,13 @@ compile addressing = do
         mux <- newName "muxAddr"
         return (mux, [d| $(varP mux) = muxA $(listE $ varE <$> addrs) |])
     muxDecs <- fmap L.concat $ mapM snd $ Map.elems muxs
-    comDecs <- mconcat <$> mapM ($ VarE wr) coms
+    comDecs <- fmap L.concat $ forM coms $ \(nm, dec) -> do
+        case Map.lookup nm muxs of
+            Just (mux, _) -> dec (VarE mux)
+            Nothing -> return []
     mbDecs <- fmap mconcat $ mapM (\(nm, matcher) -> [d| $(varP nm) = $matcher $(varE addr) |]) mbs
 
     let wrapper body = [| \ $(varP addr) $(varP wr) -> $body |]
-
-        -- outs = [ [| mask (delay False $ isJust <$> $(varE addr')) mempty |]
-        --        | (addr', _) <- mbs
-        --        ]
         out = [| mconcat $(listE outs) |]
 
         decs = mconcat [muxDecs, comDecs, mbDecs]
@@ -162,7 +161,7 @@ readWrite component = Addressing $ do
     x <- lift $ newName "x"
     (wr, _, _) <- ask
     let comp = \muxAddr -> [d| ($(varP rd), $(varP x)) = first strong $(component muxAddr wr) |]
-    tell ([comp], mempty, mempty, mempty)
+    tell ([(rd, comp)], mempty, mempty, mempty)
     return (h, Out x)
 
 conduit
@@ -180,7 +179,7 @@ conduit mkConduit = Addressing $ do
              $(varP addr') = $(pure muxAddr)
              $(varP wr') = $(pure wr)
           |]
-    tell ([comp], mempty, mempty, mempty)
+    tell ([(rd, comp)], mempty, mempty, mempty)
     return (h, Addr addr', WR wr')
 
 readWrite_
