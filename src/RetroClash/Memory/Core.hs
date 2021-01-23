@@ -83,16 +83,15 @@ memoryMap_
 memoryMap_ addr wr body = fst $ memoryMap addr wr body
 
 readWrite
-    :: forall addr' a s dom dat addr. (HiddenClockResetEnable dom, Typeable addr')
+    :: forall addr' a s dom dat addr. (Typeable addr')
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
     -> Addressing s dom dat addr (Component s addr', a)
 readWrite mkComponent = Addressing $ do
     component@(Component _ i) <- Component typeRep <$> get <* modify succ
     (_, wr, _, addrs) <- ask
     let addr = firstIn . fromMaybe (error "readWrite") $ DMap.lookup component (addrMap addrs)
-        selected = isJust <$> addr
     let (read, x) = mkComponent addr wr
-    tell (mempty, ReadMap $ Map.singleton i $ gated (delay False selected) (fanIn read), mempty)
+    tell (mempty, ReadMap $ Map.singleton i (fanIn read), mempty)
     return (component, x)
 
 matchAddr
@@ -101,6 +100,7 @@ matchAddr
     -> Addressing s dom dat addr a
 matchAddr match body = Addressing $ rws $ \(addr, wr, reads, addrs) s ->
   let addr' = fanInMaybe . fmap (match =<<) . firstIn $ addr
+      selected = isJust <$> firstIn addr'
       (x, s', (read, reads', components)) = runRWS (unAddressing body) (addr', wr, reads, addrs) s
   in (x, s', (read, reads', components))
 
@@ -113,19 +113,22 @@ override
     -> Addressing s dom dat addr a
     -> Addressing s dom dat addr a
 override sig body = Addressing $ do
+    (addr, _, _, _) <- ask
+    let selected = isJust <$> firstIn addr
+        sig' = gated (selected .&&. isJust <$> sig) (fanIn sig)
     tell (sig', mempty, mempty)
     -- local (\(addr, wr, reads, addrs) -> (gated (isNothing <$> sig) addr, wr, reads, addrs)) $ unAddressing body
     unAddressing body
-  where
-    sig' = gated (isJust <$> sig) (fanIn sig)
 
 connect
-    :: Component s addr
+    :: (HiddenClockResetEnable dom)
+    => Component s addr
     -> Addressing s dom dat addr ()
 connect component@(Component _ i) = Addressing $ do
     (addr, _, reads, _) <- ask
     let read = fromMaybe (error "connect") $ Map.lookup i (readMap reads)
-    tell (read, mempty, AddrMap $ DMap.singleton component addr)
+        selected = isJust <$> firstIn addr
+    tell (gated (delay False selected) read, mempty, AddrMap $ DMap.singleton component addr)
 
 firstIn :: FanIn dom a -> Signal dom (Maybe a)
 firstIn = fmap getFirst . getAp . getFanIn
