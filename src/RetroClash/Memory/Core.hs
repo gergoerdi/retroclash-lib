@@ -28,10 +28,18 @@ import Type.Reflection
 data Component s (addr :: Type) = Component (TypeRep addr) Int
 
 instance GEq (Component s) where
-    geq (Component a _) (Component b _) = geq a b
+    geq (Component a x) (Component b y) = do
+        p@Refl <- geq a b
+        guard $ x == y
+        return p
 
 instance GCompare (Component s) where
-    gcompare (Component a _) (Component b _) = gcompare a b
+    gcompare (Component a x) (Component b y) = case gcompare a b of
+        GEQ -> case compare x y of
+            LT -> GLT
+            EQ -> GEQ
+            GT -> GGT
+        ord -> ord
 
 newtype FanIn dom a = FanIn{ getFanIn :: Signal dom `Ap` First a }
     deriving newtype (Semigroup, Monoid)
