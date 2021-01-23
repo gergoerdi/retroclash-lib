@@ -33,7 +33,7 @@ conduit read = do
     return (component, addr, wr)
 
 readWrite_
-    :: (HiddenClockResetEnable dom, Typeable addr')
+    :: forall addr' s dom addr dat. (HiddenClockResetEnable dom, Typeable addr')
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> Signal dom (Maybe dat))
     -> Addressing s dom dat addr (Component s addr')
 readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr -> (mkComponent addr wr, ())

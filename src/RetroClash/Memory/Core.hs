@@ -68,7 +68,7 @@ memoryMap_
 memoryMap_ addr wr body = fst $ memoryMap addr wr body
 
 readWrite
-    :: (HiddenClockResetEnable dom, Typeable addr')
+    :: forall addr' a s dom dat addr. (HiddenClockResetEnable dom, Typeable addr')
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
     -> Addressing s dom dat addr (Component s addr', a)
 readWrite mkComponent = Addressing $ do
