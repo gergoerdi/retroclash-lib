@@ -5,9 +5,7 @@ module RetroClash.Port
     ) where
 
 import Clash.Prelude
-import Clash.Annotations.TH
 
-import Control.Monad (guard)
 import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
