@@ -15,6 +15,7 @@ dependencies:
   - transformers
   - barbies
   - lens
+  - containers
   - dependent-map
   - dependent-sum
 
