@@ -5,7 +5,6 @@ import Clash.Prelude
 import RetroClash.Utils
 import RetroClash.Barbies
 
-import Data.Monoid (Last(..))
 import Data.Functor.Identity
 
 import Control.Monad.Writer

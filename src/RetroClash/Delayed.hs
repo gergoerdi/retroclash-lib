@@ -16,7 +16,6 @@ module RetroClash.Delayed
 import Clash.Prelude
 import RetroClash.VGA
 import RetroClash.Utils (enable, guardA)
-import Data.Function (fix)
 import Data.Maybe
 import Control.Monad (mplus)
 
