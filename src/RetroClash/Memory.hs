@@ -112,10 +112,11 @@ compile addressing = do
         mux <- newName "muxAddr"
         return (mux, [d| $(varP mux) = muxA $(listE $ varE <$> addrs) |])
     muxDecs <- fmap L.concat $ mapM snd $ Map.elems muxs
-    comDecs <- fmap L.concat $ forM coms $ \(nm, dec) -> do
-        case Map.lookup nm muxs of
-            Just (mux, _) -> dec (VarE mux)
-            Nothing -> return []
+    comDecs <- fmap L.concat $ forM coms $ \(nm, mkCom) -> do
+        mux <- case Map.lookup nm muxs of
+            Just (mux, _) -> varE mux
+            Nothing -> [| pure Nothing |]
+        mkCom mux
     mbDecs <- fmap mconcat $ mapM (\(nm, matcher) -> [d| $(varP nm) = $matcher $(varE addr) |]) mbs
 
     let wrapper body = [| \ $(varP addr) $(varP wr) -> $body |]
