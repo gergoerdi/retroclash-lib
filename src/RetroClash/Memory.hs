@@ -21,13 +21,11 @@ module RetroClash.Memory
 import Clash.Prelude hiding (Exp, lift)
 import RetroClash.Utils
 import RetroClash.Port
-import Control.Arrow (first, second)
+import Control.Arrow (first)
 import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
 import Data.Kind
-
-import Control.Monad.State
 
 import Data.Map as Map
 import Data.List as L
@@ -50,12 +48,12 @@ type Matcher = ExpQ
 type Connection = Name
 
 -- | (out :: FanIn dom dat)
-type Read = ExpQ
+type Out = ExpQ
 
 newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
-          (Exp, Matcher, Name)                                     -- (wr, matcher, addr)
-          ([(Name, Component)], [(Name, Matcher)], [(Name, Connection)], [ExpQ])   -- (components, matcher binds, connections, reads)
+          (Exp, Matcher, Name)                                                  -- (wr, matcher, addr)
+          ([(Name, Component)], [(Name, Matcher)], [(Name, Connection)], [Out]) -- (components, matcher binds, connections, outs)
           ()
           Q
           a
@@ -81,11 +79,11 @@ instance (Backpane a1, Backpane a2, Backpane a3) => Backpane (a1, a2, a3) where
 instance Backpane () where
     backpane () = [|()|]
 
-data Out = Out Name
+data Result = Result Name
     deriving Show
 
-instance Backpane Out where
-    backpane (Out nm) = varE nm
+instance Backpane Result where
+    backpane (Result nm) = varE nm
 
 data Addr = Addr Name
     deriving Show
@@ -156,14 +154,14 @@ matchAddr match body = Addressing $ do
 readWrite
     :: forall addr' s addr. ()
     => (Exp -> Exp -> ExpQ)
-    -> Addressing s addr (Handle s addr', Out)
+    -> Addressing s addr (Handle s addr', Result)
 readWrite component = Addressing $ do
     h@(Handle rd) <- Handle <$> (lift $ newName "rd")
     x <- lift $ newName "x"
     (wr, _, _) <- ask
     let comp = \muxAddr -> [d| ($(varP rd), $(varP x)) = first strong $(component muxAddr wr) |]
     tell ([(rd, comp)], mempty, mempty, mempty)
-    return (h, Out x)
+    return (h, Result x)
 
 conduit
     :: forall addr' s addr. ()
@@ -223,7 +221,7 @@ ramFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) (pure -> wr) ->
 port
     :: forall addr' a s addr. ()
     => ExpQ
-    -> Addressing s addr (Handle s addr', Out)
+    -> Addressing s addr (Handle s addr', Result)
 port mkPort = readWrite $ \(pure -> addr) (pure -> wr) ->
   [| let (read, x) = $mkPort $ portFromAddr $addr $wr
      in (delay Nothing read, x) |]
