@@ -64,10 +64,6 @@ import RetroClash.Clock
 import Data.Maybe (fromMaybe)
 import Control.Monad.State
 import qualified Data.Foldable as F
-import RetroClash.Clock
-import Barbies
-import Barbies.Bare
-import Data.Functor.Identity
 
 withResetEnableGen
     :: (KnownDomain dom)
