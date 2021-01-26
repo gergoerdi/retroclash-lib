@@ -1,5 +1,3 @@
-{-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE RankNTypes #-}
 module RetroClash.Memory
     ( module RetroClash.Memory.Core
 
@@ -19,25 +17,24 @@ import Clash.Prelude
 import RetroClash.Port
 import Data.Maybe
 import Control.Monad
-import Type.Reflection
 
-type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
-type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
-
+{-# INLINE conduit #-}
 conduit
-    :: (Typeable addr', HiddenClockResetEnable dom)
+    :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe dat)
     -> Addressing s dom dat addr (Component s addr', Signal dom (Maybe addr'), Signal dom (Maybe dat))
 conduit read = do
     (component, (addr, wr)) <- readWrite $ \addr wr -> (read, (addr, wr))
     return (component, addr, wr)
 
+{-# INLINE readWrite_ #-}
 readWrite_
-    :: forall addr' s dom addr dat. (HiddenClockResetEnable dom, Typeable addr')
+    :: forall addr' addr dat dom s. (HiddenClockResetEnable dom)
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> Signal dom (Maybe dat))
     -> Addressing s dom dat addr (Component s addr')
 readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr -> (mkComponent addr wr, ())
 
+{-# INLINE romFromVec #-}
 romFromVec
     :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, KnownNat n)
     => SNat (n + k)
@@ -46,6 +43,7 @@ romFromVec
 romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
     fmap Just $ rom xs (maybe 0 bitCoerce <$> addr)
 
+{-# INLINE romFromFile #-}
 romFromFile
     :: (HiddenClockResetEnable dom, 1 <= n, BitPack dat)
     => SNat n
@@ -54,13 +52,15 @@ romFromFile
 romFromFile size@SNat fileName = readWrite_ $ \addr _wr ->
     fmap (Just . unpack) $ romFilePow2 fileName (maybe 0 bitCoerce <$> addr)
 
+{-# INLINE ram0 #-}
 ram0
     :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, Num dat)
     => SNat n
     -> Addressing s dom dat addr (Component s (Index n))
 ram0 size@SNat = readWrite_ $ \addr wr ->
-      fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
+    fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
 
+{-# INLINE ramFromFile #-}
 ramFromFile
     :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, BitPack dat)
     => SNat n
@@ -69,16 +69,21 @@ ramFromFile
 ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     fmap (Just . unpack) $ blockRamFile size fileName (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> (fmap pack <$> wr))
 
+type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
+type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
+
+{-# INLINE port #-}
 port
-    :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
+    :: (HiddenClockResetEnable dom, NFDataX dat)
     => Port dom addr' dat a
     -> Addressing s dom dat addr (Component s addr', a)
 port mkPort = readWrite $ \addr wr ->
     let (read, x) = mkPort $ portFromAddr addr wr
     in (delay Nothing read, x)
 
+{-# INLINE port_ #-}
 port_
-    :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
+    :: (HiddenClockResetEnable dom, NFDataX dat)
     => Port_ dom addr' dat
     -> Addressing s dom dat addr (Component s addr')
 port_ mkPort = readWrite_ $ \addr wr ->
@@ -102,14 +107,19 @@ matchRight
 matchRight = matchAddr $ either (const Nothing) Just
 
 from
-    :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr')
+    :: forall addr' dat addr a dom s. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr
     -> Addressing s dom dat addr' a
     -> Addressing s dom dat addr a
-from base = matchAddr $ \addr -> do
+from base = matchAddr $ from_ base (maxBound :: addr')
+
+from_
+    :: forall addr' addr. (Integral addr, Ord addr, Integral addr', Bounded addr')
+    => addr
+    -> addr'
+    -> addr -> Maybe addr'
+from_ base lim addr = do
     guard $ addr >= base
     let offset = addr - base
-    guard $ offset <= lim
+    guard $ offset <= fromIntegral lim
     return $ fromIntegral offset
-  where
-    lim = fromIntegral (maxBound :: addr')
