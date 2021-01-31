@@ -64,6 +64,7 @@ import RetroClash.Clock
 import Data.Maybe (fromMaybe)
 import Control.Monad.State
 import qualified Data.Foldable as F
+import Data.Monoid
 
 withResetEnableGen
     :: (KnownDomain dom)
@@ -243,7 +244,7 @@ noWrite :: (Applicative f) => f (Maybe addr) -> f (Maybe (addr, Maybe wr))
 noWrite addr = addr `withWrite` pure Nothing
 
 muxA :: (Foldable t, Alternative m, Applicative f) => t (f (m a)) -> f (m a)
-muxA = F.foldr (liftA2 (<|>)) (pure empty)
+muxA = fmap getAlt . getAp . F.foldMap (Ap . fmap Alt)
 
 muxMaybe :: (Applicative f) => f (Maybe a) -> f a -> f a
 muxMaybe = liftA2 (flip fromMaybe)

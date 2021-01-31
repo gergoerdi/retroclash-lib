@@ -15,7 +15,7 @@ module RetroClash.Delayed
 
 import Clash.Prelude
 import RetroClash.VGA
-import RetroClash.Utils (enable, guardA)
+import RetroClash.Utils (enable, guardA, muxA)
 import Data.Maybe
 import Control.Monad (mplus)
 
@@ -90,7 +90,7 @@ liftD2
 liftD2 f x y = liftD (uncurry f . unbundle) $ liftA2 (,) x y
 
 sharedDelayed
-    :: (KnownNat k, HiddenClockResetEnable dom)
+    :: (KnownNat k, KnownNat n, HiddenClockResetEnable dom)
     => (DSignal dom d addr -> DSignal dom (d + k) a)
     -> Vec (n + 1) (DSignal dom d (Maybe addr))
     -> Vec (n + 1) (DSignal dom (d + k) (Maybe a))
@@ -100,7 +100,7 @@ sharedDelayed mem reqs = reads
       where
         step en addr = (en .&&. isNothing <$> addr, guardA en addr)
 
-    addr = fromJustX <$> fold (liftA2 mplus) addrs
+    addr = fromJustX <$> muxA addrs
 
     read = mem addr
     reads = map (\addr -> enable (delayI False $ isJust <$> addr) read) addrs
