@@ -59,6 +59,9 @@ module RetroClash.Utils
     , packWrite
     , noWrite
     , withWrite
+
+    , shifterL
+    , shifterR
     ) where
 
 import Clash.Prelude
@@ -287,3 +290,33 @@ oscillateWhen
 oscillateWhen init trigger = r
   where
     r = regEn init trigger $ not <$> r
+
+shifterL
+    :: (BitPack a, HiddenClockResetEnable dom)
+    => Signal dom (Maybe a)
+    -> Signal dom Bool
+    -> Signal dom Bit
+shifterL load tick = msb <$> next
+  where
+    r = register 0 next
+
+    next = muxA
+        [ fmap pack <$> load
+        , enable tick $ (`shiftL` 1) <$> r
+        ] .|>.
+        r
+
+shifterR
+    :: (BitPack a, HiddenClockResetEnable dom)
+    => Signal dom (Maybe a)
+    -> Signal dom Bool
+    -> Signal dom Bit
+shifterR load tick = lsb <$> next
+  where
+    r = register 0 next
+
+    next = muxA
+        [ fmap pack <$> load
+        , enable tick $ (`shiftR` 1) <$> r
+        ] .|>.
+        r
