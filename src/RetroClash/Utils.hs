@@ -52,6 +52,8 @@ module RetroClash.Utils
     , enable
     , guardA
     , muxA
+    , (.<|>.)
+    , (.|>.)
     , muxMaybe
 
     , packWrite
@@ -245,6 +247,14 @@ noWrite addr = addr `withWrite` pure Nothing
 
 muxA :: (Foldable t, Alternative m, Applicative f) => t (f (m a)) -> f (m a)
 muxA = fmap getAlt . getAp . F.foldMap (Ap . fmap Alt)
+
+infixl 3 .<|>.
+(.<|>.) :: (Applicative f, Alternative m) => f (m a) -> f (m a) -> f (m a)
+(.<|>.) = liftA2 (<|>)
+
+infix 2 .|>.
+(.|>.) :: (Applicative f) => f (Maybe a) -> f a -> f a
+(.|>.) = muxMaybe
 
 muxMaybe :: (Applicative f) => f (Maybe a) -> f a -> f a
 muxMaybe = liftA2 (flip fromMaybe)
