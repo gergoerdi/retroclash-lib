@@ -9,6 +9,7 @@ module RetroClash.Delayed
 
     , delayedRegister
     , liftD
+    , liftD2
     , matchDelay
     )
     where
