@@ -88,7 +88,7 @@ liftD2
     :: (HiddenClockResetEnable dom)
     => (forall dom'. (HiddenClockResetEnable dom') => Signal dom' a -> Signal dom' b -> Signal dom' c)
     -> DSignal dom d a -> DSignal dom d b -> DSignal dom d c
-liftD2 f x y = liftD (uncurry f . unbundle) $ liftA2 (,) x y
+liftD2 f x y = unsafeFromSignal $ f (toSignal x) (toSignal y)
 
 sharedDelayed
     :: (KnownNat k, KnownNat n, HiddenClockResetEnable dom)
