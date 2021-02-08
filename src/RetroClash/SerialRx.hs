@@ -2,6 +2,9 @@
 module RetroClash.SerialRx
     ( serialRx
     , serialRxDyn
+    , RxState(..)
+    , RxBit(..)
+    , rxStep
     ) where
 
 import Clash.Prelude
@@ -14,7 +17,7 @@ import Data.Monoid
 import Data.Word
 
 data RxState n
-    = Idle
+    = RxIdle
     | RxBit Word32 (Maybe Bit) (RxBit n)
     deriving (Generic, Eq, Show, NFDataX)
 
@@ -26,7 +29,7 @@ data RxBit n
 
 rxStep :: (KnownNat n) => Word32 -> Bit -> State (RxState n) (Maybe (BitVector n))
 rxStep bitDuration input = fmap getLast . execWriterT $ get >>= \case
-    Idle -> do
+    RxIdle -> do
         when (input == low) $ waitFor StartBit
     RxBit cnt sample b | cnt > 0 -> do
         put $ RxBit (cnt - 1) sample b
@@ -34,13 +37,13 @@ rxStep bitDuration input = fmap getLast . execWriterT $ get >>= \case
         consume input b
     RxBit _ (Just sample) rx -> case rx of
         StartBit -> do
-            if sample == low then waitFor (DataBit 0 0) else put Idle
+            if sample == low then waitFor (DataBit 0 0) else put RxIdle
         DataBit xs i -> do
             let (xs', _) = bvShiftR sample xs
             waitFor $ maybe (StopBit xs') (DataBit xs') $ succIdx i
         StopBit xs -> do
             when (sample == high) $ tell $ pure xs
-            put Idle
+            put RxIdle
   where
     halfDuration = bitDuration `shiftR` 1
 
@@ -52,7 +55,7 @@ serialRxDyn
     => Signal dom Word32
     -> Signal dom Bit
     -> Signal dom (Maybe (BitVector n))
-serialRxDyn bitDuration input = mealyStateB (uncurry rxStep) Idle (bitDuration, input)
+serialRxDyn bitDuration input = mealyStateB (uncurry rxStep) RxIdle (bitDuration, input)
 
 serialRx
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
