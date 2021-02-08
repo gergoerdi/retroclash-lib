@@ -3,6 +3,9 @@ module RetroClash.SerialTx
     ( serialTx
     , serialTxDyn
     , fifo
+    , TxState(..)
+    , TxBit(..)
+    , txStep
     ) where
 
 import Clash.Prelude
@@ -15,7 +18,7 @@ import Data.Foldable (traverse_)
 import Data.Word
 
 data TxState n
-    = Idle
+    = TxIdle
     | TxBit Word32 (TxBit n)
     deriving (Show, Eq, Generic, NFDataX)
 
@@ -27,7 +30,7 @@ data TxBit n
 
 txStep :: forall n. (KnownNat n) => Word32 -> Maybe (BitVector n) -> State (TxState n) (Bit, Bool)
 txStep bitDuration input = fmap (fmap getAny) . runWriterT $ get >>= \case
-    Idle -> do
+    TxIdle -> do
         tell $ Any True
         traverse_ (goto . StartBit) input
         return high
@@ -40,7 +43,7 @@ txStep bitDuration input = fmap (fmap getAny) . runWriterT $ get >>= \case
             goto $ maybe StopBit (DataBit xs') $ succIdx i
             return $ lsb xs
         StopBit -> do
-            put Idle
+            put TxIdle
             return high
   where
     goto = put . TxBit (bitDuration - 1)
@@ -54,7 +57,7 @@ serialTxDyn
     => Signal dom Word32
     -> Signal dom (Maybe (BitVector n))
     -> (Signal dom Bit, Signal dom Bool)
-serialTxDyn bitDuration input = mealyStateB (uncurry txStep) Idle (bitDuration, input)
+serialTxDyn bitDuration input = mealyStateB (uncurry txStep) TxIdle (bitDuration, input)
 
 serialTx
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
