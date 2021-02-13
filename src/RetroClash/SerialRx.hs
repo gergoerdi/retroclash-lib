@@ -45,10 +45,11 @@ rxStep bitDuration input = fmap getLast . execWriterT $ get >>= \case
             when (sample == high) $ tell $ pure xs
             put RxIdle
   where
-    halfDuration = bitDuration `shiftR` 1
+    bitDuration1 = bitDuration `shiftR` 1
+    bitDuration2 = bitDuration - bitDuration1
 
-    waitFor = put . RxBit (halfDuration - 1) Nothing
-    consume input = put . RxBit (halfDuration - 1) (Just input)
+    waitFor = put . RxBit (bitDuration1 - 1) Nothing
+    consume input = put . RxBit (bitDuration2 - 1) (Just input)
 
 serialRxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
