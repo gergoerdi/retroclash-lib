@@ -30,7 +30,7 @@ data RxBit n
 rxStep :: (KnownNat n) => Word32 -> Bit -> State (RxState n) (Maybe (BitVector n))
 rxStep bitDuration input = fmap getLast . execWriterT $ get >>= \case
     RxIdle -> do
-        when (input == low) $ waitFor StartBit
+        when (input == low) $ put $ RxBit (bitDuration1 - 2) Nothing StartBit
     RxBit cnt sample b | cnt > 0 -> do
         put $ RxBit (cnt - 1) sample b
     RxBit _ Nothing b -> do
