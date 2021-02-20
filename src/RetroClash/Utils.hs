@@ -54,6 +54,7 @@ module RetroClash.Utils
     , muxA
     , (.<|>.)
     , (.|>.)
+    , (.<|.)
     , muxMaybe
 
     , packWrite
@@ -255,12 +256,16 @@ infixl 3 .<|>.
 (.<|>.) :: (Applicative f, Alternative m) => f (m a) -> f (m a) -> f (m a)
 (.<|>.) = liftA2 (<|>)
 
+infix 2 .<|.
+(.<|.) :: (Applicative f) => f (Maybe a) -> f a -> f a
+(.<|.) = flip (.|>.)
+
 infix 2 .|>.
-(.|>.) :: (Applicative f) => f (Maybe a) -> f a -> f a
+(.|>.) :: (Applicative f) => f a -> f (Maybe a) -> f a
 (.|>.) = muxMaybe
 
-muxMaybe :: (Applicative f) => f (Maybe a) -> f a -> f a
-muxMaybe = liftA2 (flip fromMaybe)
+muxMaybe :: (Applicative f) => f a -> f (Maybe a) -> f a
+muxMaybe = liftA2 fromMaybe
 
 withStart :: (HiddenClockResetEnable dom) => a -> Signal dom a -> Signal dom a
 withStart x0 = mux (register True $ pure False) (pure x0)
@@ -303,7 +308,7 @@ shifterL load tick = msb <$> next
     next = muxA
         [ fmap pack <$> load
         , enable tick $ (`shiftL` 1) <$> r
-        ] .|>.
+        ] .<|.
         r
 
 shifterR
@@ -318,5 +323,5 @@ shifterR load tick = lsb <$> next
     next = muxA
         [ fmap pack <$> load
         , enable tick $ (`shiftR` 1) <$> r
-        ] .|>.
+        ] .<|.
         r
