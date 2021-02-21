@@ -19,7 +19,7 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
 
-import Data.Map as Map
+import RetroClash.Internal.Assoc as Map
 import Unsafe.Coerce
 
 type Key = Int
@@ -72,7 +72,7 @@ readWrite
 readWrite mkComponent = Addressing $ do
     component@(Component k) <- Component <$> get <* modify succ
     (_, wr, _, addrs) <- ask
-    let addr = firstIn . unsafeCoerce . fromMaybe (error "readWrite") $ Map.lookup k (addrMap addrs)
+    let addr = firstIn . unsafeCoerce $ Map.lookup k (addrMap addrs)
     let (read, x) = mkComponent addr wr
     tell (mempty, ReadMap $ Map.singleton k (fanIn read), mempty)
     return (component, x)
@@ -106,7 +106,7 @@ connect
     -> Addressing s dom dat addr ()
 connect component@(Component k) = Addressing $ do
     (addr, _, reads, _) <- ask
-    let read = fromMaybe (error "connect") $ Map.lookup k (readMap reads)
+    let read = Map.lookup k (readMap reads)
         selected = isJust <$> firstIn addr
     tell (gated (delay False selected) read, mempty, AddrMap $ Map.singleton k $ unsafeCoerce addr)
 
