@@ -63,6 +63,7 @@ module RetroClash.Utils
     , packWrite
     , noWrite
     , withWrite
+    , singlePort
 
     , shifterL
     , shifterR
@@ -251,6 +252,9 @@ withWrite = liftA2 $ \addr wr -> (,wr) <$> addr
 
 noWrite :: (Applicative f) => f (Maybe addr) -> f (Maybe (addr, Maybe wr))
 noWrite addr = addr `withWrite` pure Nothing
+
+singlePort :: (Applicative f) => (f addr -> f (Maybe (addr, wr)) -> r) -> (f addr -> f (Maybe wr) -> r)
+singlePort mem addr wr = mem addr (packWrite <$> addr <*> wr)
 
 muxA :: (Foldable t, Alternative m, Applicative f) => t (f (m a)) -> f (m a)
 muxA = fmap getAlt . getAp . F.foldMap (Ap . fmap Alt)
