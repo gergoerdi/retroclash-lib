@@ -30,8 +30,8 @@ data RxBit n
 rxStep :: (KnownNat n) => Word32 -> Bit -> State (RxState n) (Maybe (BitVector n))
 rxStep bitDuration input = fmap getLast . execWriterT $ get >>= \case
     RxIdle -> do
-        when (input == low) $ put $ RxBit (bitDuration1 - 2) Nothing StartBit
-    RxBit cnt sample b | cnt > 0 -> do
+        when (input == low) $ put $ RxBit (bitDuration1 - 1) Nothing StartBit
+    RxBit cnt sample b | cnt > 1 -> do
         put $ RxBit (cnt - 1) sample b
     RxBit _ Nothing b -> do
         consume input b
@@ -45,11 +45,11 @@ rxStep bitDuration input = fmap getLast . execWriterT $ get >>= \case
             when (sample == high) $ tell $ pure xs
             put RxIdle
   where
-    bitDuration1 = bitDuration `shiftR` 1
+    bitDuration1 = half bitDuration
     bitDuration2 = bitDuration - bitDuration1
 
-    waitFor = put . RxBit (bitDuration1 - 1) Nothing
-    consume input = put . RxBit (bitDuration2 - 1) (Just input)
+    waitFor = put . RxBit bitDuration1 Nothing
+    consume input = put . RxBit bitDuration2 (Just input)
 
 serialRxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
