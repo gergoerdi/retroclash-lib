@@ -20,31 +20,16 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
 
-import Data.Kind
-import Data.Dependent.Map as DMap
-import Data.GADT.Compare
-import Type.Reflection
+import Data.Map as Map
+import Unsafe.Coerce
 
-data Component s (addr :: Type) = Component (TypeRep addr) Int
-
-instance GEq (Component s) where
-    geq (Component a x) (Component b y) = do
-        p@Refl <- geq a b
-        guard $ x == y
-        return p
-
-instance GCompare (Component s) where
-    gcompare (Component a x) (Component b y) = case gcompare a b of
-        GEQ -> case compare x y of
-            LT -> GLT
-            EQ -> GEQ
-            GT -> GGT
-        ord -> ord
+type Key = Int
+data Component s addr = Component Key
 
 newtype FanIn dom a = FanIn{ getFanIn :: Signal dom `Ap` First a }
     deriving newtype (Semigroup, Monoid)
 
-newtype AddrMap s dom = AddrMap{ addrMap :: DMap (Component s) (FanIn dom) }
+newtype AddrMap s dom = AddrMap{ addrMap :: Map Key (FanIn dom ()) }
     deriving newtype (Monoid)
 
 instance Semigroup (AddrMap s dom) where
@@ -76,13 +61,13 @@ memoryMap_
 memoryMap_ addr wr body = fst $ memoryMap addr wr body
 
 readWrite
-    :: forall addr' a s dom dat addr. (HiddenClockResetEnable dom, Typeable addr')
+    :: forall addr' a s dom dat addr. (HiddenClockResetEnable dom)
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
     -> Addressing s dom dat addr (Component s addr', a)
 readWrite mkComponent = Addressing $ do
-    component <- Component typeRep <$> get <* modify succ
+    component@(Component k) <- Component <$> get <* modify succ
     (_, wr, addrs) <- ask
-    let addr = firstIn . fromMaybe mempty $ DMap.lookup component (addrMap addrs)
+    let addr = firstIn . unsafeCoerce . fromMaybe mempty $ Map.lookup k (addrMap addrs)
         selected = isJust <$> addr
     let (read, x) = mkComponent addr wr
     tell (gated (delay False selected) (fanIn read), mempty)
@@ -111,9 +96,9 @@ override sig = Addressing . censor (first $ mappend sig') . unAddressing
 connect
     :: Component s addr
     -> Addressing s dom dat addr ()
-connect component@(Component _ i) = Addressing $ do
+connect component@(Component k) = Addressing $ do
     (addr, _, _) <- ask
-    tell (mempty, AddrMap $ DMap.singleton component addr)
+    tell (mempty, AddrMap $ Map.singleton k $ unsafeCoerce addr)
 
 firstIn :: FanIn dom a -> Signal dom (Maybe a)
 firstIn = fmap getFirst . getAp . getFanIn

@@ -19,13 +19,12 @@ import Clash.Prelude
 import RetroClash.Port
 import Data.Maybe
 import Control.Monad
-import Type.Reflection
 
 type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
 type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
 
 conduit
-    :: (Typeable addr', HiddenClockResetEnable dom)
+    :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe dat)
     -> Addressing s dom dat addr (Component s addr', Signal dom (Maybe addr'), Signal dom (Maybe dat))
 conduit read = do
@@ -33,7 +32,7 @@ conduit read = do
     return (component, addr, wr)
 
 readWrite_
-    :: forall addr' s dom addr dat. (HiddenClockResetEnable dom, Typeable addr')
+    :: forall addr' s dom addr dat. (HiddenClockResetEnable dom)
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> Signal dom (Maybe dat))
     -> Addressing s dom dat addr (Component s addr')
 readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr -> (mkComponent addr wr, ())
@@ -70,7 +69,7 @@ ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     fmap (Just . unpack) $ blockRamFile size fileName (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> (fmap pack <$> wr))
 
 port
-    :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
+    :: (HiddenClockResetEnable dom, NFDataX dat)
     => Port dom addr' dat a
     -> Addressing s dom dat addr (Component s addr', a)
 port mkPort = readWrite $ \addr wr ->
@@ -78,7 +77,7 @@ port mkPort = readWrite $ \addr wr ->
     in (delay Nothing read, x)
 
 port_
-    :: (HiddenClockResetEnable dom, Typeable addr', NFDataX dat)
+    :: (HiddenClockResetEnable dom, NFDataX dat)
     => Port_ dom addr' dat
     -> Addressing s dom dat addr (Component s addr')
 port_ mkPort = readWrite_ $ \addr wr ->

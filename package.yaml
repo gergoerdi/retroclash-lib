@@ -15,8 +15,7 @@ dependencies:
   - transformers
   - barbies
   - lens
-  - dependent-map
-  - dependent-sum
+  - containers
 
 source-dirs:
   - src
