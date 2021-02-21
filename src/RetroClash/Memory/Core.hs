@@ -20,7 +20,7 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
 
-import Data.Map as Map
+import RetroClash.Internal.Assoc as Map
 import Unsafe.Coerce
 
 type Key = Int
@@ -67,7 +67,7 @@ readWrite
 readWrite mkComponent = Addressing $ do
     component@(Component k) <- Component <$> get <* modify succ
     (_, wr, addrs) <- ask
-    let addr = firstIn . unsafeCoerce . fromMaybe mempty $ Map.lookup k (addrMap addrs)
+    let addr = firstIn . unsafeCoerce $ Map.lookup k (addrMap addrs)
         selected = isJust <$> addr
     let (read, x) = mkComponent addr wr
     tell (gated (delay False selected) (fanIn read), mempty)
