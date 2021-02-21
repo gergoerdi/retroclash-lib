@@ -6,6 +6,7 @@ module RetroClash.Delayed
     , delayedRam
     , delayedBlockRam1
     , sharedDelayed
+    , sharedDelayedRW
 
     , delayedRegister
     , liftD
@@ -15,8 +16,9 @@ module RetroClash.Delayed
     where
 
 import Clash.Prelude
+import qualified Clash.Signal.Delayed.Bundle as D
 import RetroClash.VGA
-import RetroClash.Utils (enable, guardA, muxA)
+import RetroClash.Utils (enable, guardA, muxA, (.<|))
 import Data.Maybe
 import Control.Monad (mplus)
 
@@ -105,3 +107,10 @@ sharedDelayed mem reqs = reads
 
     read = mem addr
     reads = map (\addr -> enable (delayI False $ isJust <$> addr) read) addrs
+
+sharedDelayedRW
+    :: (KnownNat k, KnownNat n, HiddenClockResetEnable dom)
+    => (DSignal dom d addr -> DSignal dom d (Maybe wr) -> DSignal dom (d + k) a)
+    -> Vec (n + 1) (DSignal dom d (Maybe (addr, Maybe wr)))
+    -> Vec (n + 1) (DSignal dom (d + k) (Maybe a))
+sharedDelayedRW ram = sharedDelayed $ uncurry ram . D.unbundle . (.<| (undefined, Nothing))
