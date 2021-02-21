@@ -55,7 +55,9 @@ module RetroClash.Utils
     , muxA
     , (.<|>.)
     , (.|>.)
+    , (|>.)
     , (.<|.)
+    , (.<|)
     , muxMaybe
 
     , packWrite
@@ -257,13 +259,19 @@ infixl 3 .<|>.
 (.<|>.) :: (Applicative f, Alternative m) => f (m a) -> f (m a) -> f (m a)
 (.<|>.) = liftA2 (<|>)
 
-infix 2 .<|.
+infix 2 .<|., .<|, |>., .|>.
+
 (.<|.) :: (Applicative f) => f (Maybe a) -> f a -> f a
 (.<|.) = flip (.|>.)
 
-infix 2 .|>.
+(.<|) :: (Applicative f) => f (Maybe a) -> a -> f a
+(.<|) = flip (|>.)
+
 (.|>.) :: (Applicative f) => f a -> f (Maybe a) -> f a
 (.|>.) = muxMaybe
+
+(|>.) :: (Applicative f) => a -> f (Maybe a) -> f a
+x |>. fmx = fromMaybe x <$> fmx
 
 muxMaybe :: (Applicative f) => f a -> f (Maybe a) -> f a
 muxMaybe = liftA2 fromMaybe
