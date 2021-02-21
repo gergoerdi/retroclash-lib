@@ -33,6 +33,7 @@ newtype AddrMap s dom = AddrMap{ addrMap :: Map Key (FanIn dom ()) }
     deriving newtype (Monoid)
 
 instance Semigroup (AddrMap s dom) where
+    {-# INLINE (<>) #-}
     AddrMap map1 <> AddrMap map2 = AddrMap $ unionWithKey (const mappend) map1 map2
 
 newtype Addressing s dom dat addr a = Addressing
@@ -44,6 +45,7 @@ newtype Addressing s dom dat addr a = Addressing
     }
     deriving newtype (Functor, Applicative, Monad)
 
+{-# INLINE memoryMap #-}
 memoryMap
     :: Signal dom (Maybe addr)
     -> Signal dom (Maybe dat)
@@ -53,6 +55,7 @@ memoryMap addr wr body = (join <$> firstIn read, x)
   where
     (x, (read, conns)) = evalRWS (unAddressing body) (fanInMaybe addr, wr, conns) 0
 
+{-# INLINE memoryMap_ #-}
 memoryMap_
     :: Signal dom (Maybe addr)
     -> Signal dom (Maybe dat)
@@ -60,6 +63,7 @@ memoryMap_
     -> Signal dom (Maybe dat)
 memoryMap_ addr wr body = fst $ memoryMap addr wr body
 
+{-# INLINE readWrite #-}
 readWrite
     :: forall addr' a s dom dat addr. (HiddenClockResetEnable dom)
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
@@ -73,6 +77,7 @@ readWrite mkComponent = Addressing $ do
     tell (gated (delay False selected) (fanIn read), mempty)
     return (component, x)
 
+{-# INLINE matchAddr #-}
 matchAddr
     :: (addr -> Maybe addr')
     -> Addressing s dom dat addr' a
@@ -85,6 +90,7 @@ matchAddr match body = Addressing $ rws $ \(addr, wr, addrs) s ->
 gated :: Signal dom Bool -> FanIn dom a -> FanIn dom a
 gated p sig = fanInMaybe $ mux p (firstIn sig) (pure Nothing)
 
+{-# INLINE override #-}
 override
     :: Signal dom (Maybe dat)
     -> Addressing s dom dat addr a
@@ -93,6 +99,7 @@ override sig = Addressing . censor (first $ mappend sig') . unAddressing
   where
     sig' = gated (isJust <$> sig) (fanIn sig)
 
+{-# INLINE connect #-}
 connect
     :: Component s addr
     -> Addressing s dom dat addr ()

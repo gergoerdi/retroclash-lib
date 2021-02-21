@@ -23,6 +23,7 @@ import Control.Monad
 type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
 type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
 
+{-# INLINE conduit #-}
 conduit
     :: (HiddenClockResetEnable dom)
     => Signal dom (Maybe dat)
@@ -37,6 +38,7 @@ readWrite_
     -> Addressing s dom dat addr (Component s addr')
 readWrite_ mkComponent = fmap fst $ readWrite $ \addr wr -> (mkComponent addr wr, ())
 
+{-# INLINE romFromVec #-}
 romFromVec
     :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, KnownNat n)
     => SNat (n + k)
@@ -45,6 +47,7 @@ romFromVec
 romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
     fmap Just $ rom xs (maybe 0 bitCoerce <$> addr)
 
+{-# INLINE romFromFile #-}
 romFromFile
     :: (HiddenClockResetEnable dom, 1 <= n, BitPack dat)
     => SNat n
@@ -53,6 +56,7 @@ romFromFile
 romFromFile size@SNat fileName = readWrite_ $ \addr _wr ->
     fmap (Just . unpack) $ romFilePow2 fileName (maybe 0 bitCoerce <$> addr)
 
+{-# INLINE ram0 #-}
 ram0
     :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, Num dat)
     => SNat n
@@ -60,6 +64,7 @@ ram0
 ram0 size@SNat = readWrite_ $ \addr wr ->
       fmap Just $ blockRam1 ClearOnReset size 0 (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> wr)
 
+{-# INLINE ramFromFile #-}
 ramFromFile
     :: (HiddenClockResetEnable dom, 1 <= n, NFDataX dat, BitPack dat)
     => SNat n
@@ -68,6 +73,7 @@ ramFromFile
 ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     fmap (Just . unpack) $ blockRamFile size fileName (fromMaybe 0 <$> addr) (liftA2 (,) <$> addr <*> (fmap pack <$> wr))
 
+{-# INLINE port #-}
 port
     :: (HiddenClockResetEnable dom, NFDataX dat)
     => Port dom addr' dat a
@@ -76,6 +82,7 @@ port mkPort = readWrite $ \addr wr ->
     let (read, x) = mkPort $ portFromAddr addr wr
     in (delay Nothing read, x)
 
+{-# INLINE port_ #-}
 port_
     :: (HiddenClockResetEnable dom, NFDataX dat)
     => Port_ dom addr' dat
@@ -84,22 +91,26 @@ port_ mkPort = readWrite_ $ \addr wr ->
     let read = mkPort $ portFromAddr addr wr
     in (delay Nothing read)
 
+{-# INLINE tag #-}
 tag
     :: addr'
     -> Addressing s dom dat (addr', addr) a
     -> Addressing s dom dat addr a
 tag t = matchAddr $ \addr -> Just (t, addr)
 
+{-# INLINE matchLeft #-}
 matchLeft
     :: Addressing s dom dat addr1 a
     -> Addressing s dom dat (Either addr1 addr2) a
 matchLeft = matchAddr $ either Just (const Nothing)
 
+{-# INLINE matchRight #-}
 matchRight
     :: Addressing s dom dat addr2 a
     -> Addressing s dom dat (Either addr1 addr2) a
 matchRight = matchAddr $ either (const Nothing) Just
 
+{-# INLINE from #-}
 from
     :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr
