@@ -18,8 +18,8 @@ import Clash.Prelude
 import Control.Arrow (first)
 import Data.Maybe
 import Control.Monad
-import Control.Monad.RWS
-
+import RetroClash.Internal.Monoid
+import RetroClash.Internal.RWS
 import RetroClash.Internal.Assoc as Map
 import Unsafe.Coerce
 
