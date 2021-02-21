@@ -19,37 +19,20 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
 
-import Data.Kind
-import Data.Dependent.Map as DMap
 import Data.Map as Map
-import Data.GADT.Compare
-import Type.Reflection
+import Unsafe.Coerce
 
 type Key = Int
-data Component s (addr :: Type) = Component (TypeRep addr) Key
-
-instance GEq (Component s) where
-    geq (Component a x) (Component b y) = do
-        p@Refl <- geq a b
-        guard $ x == y
-        return p
-
-instance GCompare (Component s) where
-    gcompare (Component a x) (Component b y) = case gcompare a b of
-        GEQ -> case compare x y of
-            LT -> GLT
-            EQ -> GEQ
-            GT -> GGT
-        ord -> ord
+data Component s addr = Component Key
 
 newtype FanIn dom a = FanIn{ getFanIn :: Signal dom `Ap` First a }
     deriving newtype (Semigroup, Monoid)
 
-newtype AddrMap s dom = AddrMap{ addrMap :: DMap (Component s) (FanIn dom) }
+newtype AddrMap s dom = AddrMap{ addrMap :: Map Key (FanIn dom ()) }
     deriving newtype (Monoid)
 
 instance Semigroup (AddrMap s dom) where
-    AddrMap map1 <> AddrMap map2 = AddrMap $ DMap.unionWithKey (const mappend) map1 map2
+    AddrMap map1 <> AddrMap map2 = AddrMap $ Map.unionWithKey (const mappend) map1 map2
 
 newtype ReadMap s dom dat = ReadMap{ readMap :: Map Key (FanIn dom (Maybe dat)) }
     deriving newtype (Monoid)
@@ -83,15 +66,15 @@ memoryMap_
 memoryMap_ addr wr body = fst $ memoryMap addr wr body
 
 readWrite
-    :: forall addr' a s dom dat addr. (Typeable addr')
+    :: forall addr' a s dom dat addr. ()
     => (Signal dom (Maybe addr') -> Signal dom (Maybe dat) -> (Signal dom (Maybe dat), a))
     -> Addressing s dom dat addr (Component s addr', a)
 readWrite mkComponent = Addressing $ do
-    component@(Component _ i) <- Component typeRep <$> get <* modify succ
+    component@(Component k) <- Component <$> get <* modify succ
     (_, wr, _, addrs) <- ask
-    let addr = firstIn . fromMaybe (error "readWrite") $ DMap.lookup component (addrMap addrs)
+    let addr = firstIn . unsafeCoerce . fromMaybe (error "readWrite") $ Map.lookup k (addrMap addrs)
     let (read, x) = mkComponent addr wr
-    tell (mempty, ReadMap $ Map.singleton i (fanIn read), mempty)
+    tell (mempty, ReadMap $ Map.singleton k (fanIn read), mempty)
     return (component, x)
 
 matchAddr
@@ -121,11 +104,11 @@ connect
     :: (HiddenClockResetEnable dom)
     => Component s addr
     -> Addressing s dom dat addr ()
-connect component@(Component _ i) = Addressing $ do
+connect component@(Component k) = Addressing $ do
     (addr, _, reads, _) <- ask
-    let read = fromMaybe (error "connect") $ Map.lookup i (readMap reads)
+    let read = fromMaybe (error "connect") $ Map.lookup k (readMap reads)
         selected = isJust <$> firstIn addr
-    tell (gated (delay False selected) read, mempty, AddrMap $ DMap.singleton component addr)
+    tell (gated (delay False selected) read, mempty, AddrMap $ Map.singleton k $ unsafeCoerce addr)
 
 firstIn :: FanIn dom a -> Signal dom (Maybe a)
 firstIn = fmap getFirst . getAp . getFanIn
