@@ -122,7 +122,7 @@ compile addressing = do
 
         decs = mconcat [muxDecs, comDecs, mbDecs]
 
-    return (wrapper, decs, [| fmap (join . getFirst) (getAp $out) |], backpane x)
+    return (wrapper, decs, [| fmap (fromMaybe (Just 0) . getFirst) (getAp $out) |], backpane x)
 
 memoryMap :: forall addr a. Backpane a => ExpQ -> ExpQ -> (forall s. Addressing s addr a) -> ExpQ
 memoryMap addr wr addressing = do
