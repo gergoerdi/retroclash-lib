@@ -12,6 +12,7 @@ module RetroClash.Utils
     , bitwise
     , parity
     , half
+    , halfIndex
 
     , bvShiftL
     , bvShiftR
@@ -291,6 +292,12 @@ parity = fold xor . bitCoerce @_ @(Vec (BitSize a) Bit)
 
 half :: (Bits a) => a -> a
 half x = x `shiftR` 1
+
+halfIndex
+    :: (KnownNat n, 1 <= (2 * n), (CLog 2 (2 * n)) ~ (CLog 2 n + 1))
+    => Index (2 * n)
+    -> Index n
+halfIndex = fst . bitCoerce @_ @(_, Bit)
 
 bvShiftL :: (KnownNat n) => BitVector n -> Bit -> (Bit, BitVector n)
 bvShiftL xs x = bitCoerce (xs, x)
