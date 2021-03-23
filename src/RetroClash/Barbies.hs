@@ -22,3 +22,8 @@ bbundle = fmap bstrip . bsequence'
 
 bunbundle :: (Functor f, BareB b, DistributiveB (b Covered)) => f (Pure b) -> b Covered f
 bunbundle = bdistribute' . fmap bcover
+
+instance (BareB b, TraversableB (b Covered), DistributiveB (b Covered)) => Bundle (Pure b) where
+    type Unbundled dom (Pure b) = Signals dom b
+    bundle = bbundle
+    unbundle = bunbundle
