@@ -136,9 +136,9 @@ ramFromFile
     -> Addressing s dom dat addr (Handle s (Index n))
 ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     [| fmap (Just . unpack) $
-     singlePort (blockRamFile size $fileName)
+     blockRamFile size $fileName
        (fromMaybe 0 <$> $addr)
-       (fmap pack <$> $wr)
+       (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr))
     |]
 
 from
