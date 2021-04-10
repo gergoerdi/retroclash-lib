@@ -128,7 +128,7 @@ romFromVec
     -> ExpQ {-(Vec n dat)-}
     -> Addressing s dom dat addr (Handle s (Index n))
 romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
-    [| fmap Just $ rom $xs (maybe 0 bitCoerce <$> $addr) |]
+    [| fmap Just $ rom $xs (bitCoerce . fromJustX <$> $addr) |]
 
 ramFromFile
     :: SNat n
@@ -137,7 +137,7 @@ ramFromFile
 ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     [| fmap (Just . unpack) $
      blockRamFile size $fileName
-       (fromMaybe 0 <$> $addr)
+       (fromJustX <$> $addr)
        (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr))
     |]
 
