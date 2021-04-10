@@ -17,8 +17,6 @@ dependencies:
   - lens
   - containers
   - template-haskell
-  - dependent-map
-  - dependent-sum
 
 source-dirs:
   - src

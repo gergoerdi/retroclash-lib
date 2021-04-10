@@ -25,52 +25,28 @@ import Data.Map as Map
 import Data.List as L
 import Data.Function (on)
 
-import Data.Kind
-import Data.Dependent.Map as DMap
-import Data.Dependent.Sum as DSum
-import Data.GADT.Compare
-import Type.Reflection
-
 import Language.Haskell.TH hiding (Type)
 import Language.Haskell.TH.Syntax hiding (Type, lift)
 import qualified Language.Haskell.TH.Syntax as TH
 
-data Handle s (addr :: Type) = Handle Name (TypeRep addr)
-
-instance GEq (Handle s) where
-    geq (Handle a ta) (Handle b tb) = do
-        Refl <- geq ta tb
-        guard $ a == b
-        return Refl
-
-instance GCompare (Handle s) where
-    gcompare (Handle a ta) (Handle b tb) = case gcompare ta tb of
-        GLT -> GLT
-        GGT -> GGT
-        GEQ -> case compare a b of
-            LT -> GLT
-            GT -> GGT
-            EQ -> GEQ
+data Handle s (addr :: Type) = Handle Name
 
 type FanIn dom a = Signal dom `Ap` First (Maybe a)
 
-newtype Component s dom dat addr = Component
-    { mkComponent :: ExpQ {-(Signal dom (Maybe addr))-} -> ExpQ {-(Signal dom (Maybe dat))-} }
+type Component s dom dat = ExpQ {-(Signal dom (Maybe addr))-} -> ExpQ {-(Signal dom (Maybe dat))-}
 
-newtype Connections s dom addr = Connections
-    { getAddrs :: [ExpQ {-(Signal dom (Maybe addr))-}] }
+type Connections s dom = [ExpQ {-(Signal dom (Maybe addr))-}]
 
 newtype ComponentMap s dom dat = ComponentMap
-    { components :: DMap (Handle s) (Component s dom dat) }
+    { components :: Map Name (Component s dom dat) }
     deriving newtype (Semigroup, Monoid)
 
 newtype ConnectionMap s dom = ConnectionMap
-    { connections :: DMap (Handle s) (Connections s dom) }
+    { connections :: Map Name (Connections s dom) }
     deriving newtype (Monoid)
 
 instance Semigroup (ConnectionMap s dom) where
-    ConnectionMap m1 <> ConnectionMap m2 = ConnectionMap $
-        DMap.unionWithKey (\_ c1 c2 -> Connections (getAddrs c1 <> getAddrs c2)) m1 m2
+    ConnectionMap m1 <> ConnectionMap m2 = ConnectionMap $ Map.unionWith (<>) m1 m2
 
 newtype Addressing (s :: Type) (dom :: Domain) (dat :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
@@ -93,11 +69,11 @@ compile addressing addr wr = do
 
     let compDecs = mconcat
             [ [d| $(varP nm) = $rd |]
-            | h@(Handle nm _) :=> comp <- DMap.toList comps
-            , let addrIn = case DMap.lookup h conns of
-                      Just (getAddrs -> addrs) -> [| muxA $(listE addrs) |]
+            | (nm, mkComp) <- Map.toList comps
+            , let addrIn = case Map.lookup nm conns of
+                      Just addrs -> [| muxA $(listE addrs) |]
                       Nothing -> [| pure Nothing |]
-            , let rd = mkComponent comp addrIn
+            , let rd = mkComp addrIn
             ]
 
     let out = [| fmap (fromMaybe (Just 0) . getFirst) . getAp $ mconcat $(listE outs) |]
@@ -139,14 +115,14 @@ matchAddr match body = Addressing $ do
     applyMask addr' outs = [| mask (delay False $ isJust <$> $addr') (mconcat $(listE outs)) |]
 
 readWrite_
-    :: forall addr' addr s dom dat. (Typeable addr')
+    :: forall addr' addr s dom dat. ()
     => (ExpQ {-(Signal dom (Maybe addr'))-} -> ExpQ {-(Signal dom (Maybe dat))-} -> ExpQ {-(Signal dom (Maybe dat))-})
     -> Addressing s dom dat addr (Handle s addr')
 readWrite_ component = Addressing $ do
-    h@(Handle nm _) <- Handle <$> (lift $ newName "rd") <*> pure typeRep
+    h@(Handle nm) <- Handle <$> (lift $ newName "rd")
     (_, wr) <- ask
-    let comp = Component $ \addr -> [| strong $(component addr wr) |]
-    tell (mempty, ComponentMap $ DMap.singleton h comp, mempty, mempty)
+    let comp = \addr -> [| strong $(component addr wr) |]
+    tell (mempty, ComponentMap $ Map.singleton nm comp, mempty, mempty)
     return h
 
 romFromVec
@@ -178,9 +154,9 @@ from base = matchAddr [| from_ $(TH.lift (base :: addr)) $(TH.lift (maxBound :: 
 connect
     :: Handle s addr
     -> Addressing s dom dat addr ()
-connect h@(Handle nm _) = Addressing $ do
+connect h@(Handle nm) = Addressing $ do
     (addr, _) <- ask
-    let conn = ConnectionMap $ DMap.singleton h $ Connections [addr]
+    let conn = ConnectionMap $ Map.singleton nm [addr]
         out = varE nm
     tell (mempty, mempty, conn, [out])
 
