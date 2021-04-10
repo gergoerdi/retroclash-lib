@@ -27,6 +27,7 @@ import Data.Function (on)
 
 import Data.Kind
 import Data.Dependent.Map as DMap
+import Data.Dependent.Sum as DSum
 import Data.GADT.Compare
 import Type.Reflection
 
@@ -71,12 +72,6 @@ instance Semigroup (ConnectionMap s dom) where
     ConnectionMap m1 <> ConnectionMap m2 = ConnectionMap $
         DMap.unionWithKey (\_ c1 c2 -> Connections (getAddrs c1 <> getAddrs c2)) m1 m2
 
--- -- | (addr :: Signal dom (Maybe addr))
--- type Connection = Name
-
--- -- | (muxAddr :: Signal dom (Maybe addr)) -> (rd :: FanIn dom dat, x :: a)
--- type Component = ExpQ -> DecsQ
-
 newtype Addressing (s :: Type) (dom :: Domain) (dat :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
           (TExpQ (Signal dom (Maybe addr)), TExpQ (Signal dom (Maybe dat)))
@@ -87,49 +82,42 @@ newtype Addressing (s :: Type) (dom :: Domain) (dat :: Type) (addr :: Type) (a :
     }
     deriving newtype (Functor, Applicative, Monad)
 
--- listMap :: (Ord k) => [(k, v)] -> Map.Map k [v]
--- listMap =
---     Map.fromList .
---     fmap (\ kvs@((k, _):_) -> (k, fmap snd kvs)) .
---     groupBy ((==) `on` fst) .
---     sortBy (compare `on` fst)
+compile
+    :: forall addr dom dat a b. (Num dat)
+    => (forall s. Addressing s dom dat addr ())
+    -> TExpQ (Signal dom (Maybe addr))
+    -> TExpQ (Signal dom (Maybe dat))
+    -> TExpQ (Signal dom (Maybe dat))
+compile addressing addr wr = do
+    ((), (decs, components -> comps, connections -> conns, outs)) <- evalRWST (runAddressing addressing) (addr, wr) ()
 
--- compile
---     :: forall addr dom dat a. ()
---     => (forall s. Addressing s dom addr dat addr ())
---     -> Q (ExpQ -> ExpQ, [Dec], ExpQ)
--- compile addressing = do
---     addr <- newName "addr"
---     wr <- newName "wr"
---     ((), (coms, mbs, listMap -> conns, outs)) <- evalRWST (runAddressing addressing) (unsafeTExpCoerce $ varE wr, [||id||], addr) ()
+    let compDecs = mconcat
+            [ [d| $(varP nm) = $(unTypeQ rd) |]
+            | h@(Handle nm _) :=> comp <- DMap.toList comps
+            , let addrIn = case DMap.lookup h conns of
+                      Just (getAddrs -> addrs) -> [|| muxA $$(tlistE addrs) ||]
+                      Nothing -> [|| pure Nothing ||]
+            , let rd = mkComponent comp addrIn
+            ]
 
---     muxs <- forM conns $ \ addrs -> do
---         mux <- newName "muxAddr"
---         return (mux, [d| $(varP mux) = muxA $(listE $ varE <$> addrs) |])
---     muxDecs <- fmap L.concat $ mapM snd $ Map.elems muxs
---     comDecs <- fmap L.concat $ forM coms $ \(nm, mkCom) -> do
---         mkCom $ case Map.lookup nm muxs of
---             Just (mux, _) -> varE mux
---             Nothing -> [| pure Nothing |]
---     mbDecs <- fmap mconcat $ mapM (\(nm, MkSomeMatcher matcher) -> [d| $(varP nm) = $(unTypeQ matcher) $(varE addr) |]) mbs
+    let out = [|| fmap (fromMaybe (Just 0) . getFirst) . getAp $ mconcat $$(tlistE outs) ||]
 
---     let wrapper body = [| \ $(varP addr) $(varP wr) -> $body |]
---         out = [| mconcat $(listE outs) |]
-
---         decs = mconcat [muxDecs, comDecs, mbDecs]
-
---     return (wrapper, decs, [| fmap (fromMaybe (Just 0) . getFirst) (getAp $out) |])
+    decs <- decs <> compDecs
+    unsafeTExpCoerce $ letE (pure <$> decs) (unTypeQ out)
 
 memoryMap_
-    :: forall addr dat dom. (HiddenClockResetEnable dom)
+    :: forall addr dat dom. (HiddenClockResetEnable dom, Num dat)
     => TExpQ (Signal dom (Maybe addr))
     -> TExpQ (Signal dom (Maybe dat))
     -> (forall s. Addressing s dom dat addr ())
     -> TExpQ (Signal dom (Maybe dat))
-memoryMap_ addr wr addressing = wr
--- memoryMap_ addr wr addressing = do
---     (wrapper, decs, rd) <- compile addressing
---     [| $(wrapper $ LetE decs <$> rd) $addr $wr |]
+memoryMap_ addr wr addressing =
+    [|| let addr' = $$addr; wr' = $$wr
+        in $$(compile addressing [|| addr' ||] [|| wr' ||])
+    ||]
+    -- rd <- compile addressing (unsafeTExpCoerce $ varE addr') (unsafeTExpCoerce $ varE wr')
+    -- -- [|| $$(unsafeTExpCoerce $ letE decs (unTypeQ rd)) ||]
+    -- [|| let addr = $$addr; wr = $$wr in $$rd ||]
 
 matchAddr
     :: forall addr' addr a s dom dat. (HiddenClockResetEnable dom)
@@ -153,8 +141,8 @@ matchAddr match body = Addressing $ do
     applyMask :: TExpQ (Signal dom (Maybe addr')) -> [TExpQ (FanIn dom dat)] -> TExpQ (FanIn dom dat)
     applyMask addr' outs = [|| mask (delay False $ isJust <$> $$addr') (mconcat $$(tlistE outs)) ||]
 
-    tlistE :: [TExpQ b] -> TExpQ [b]
-    tlistE = unsafeTExpCoerce . listE . fmap unTypeQ
+tlistE :: [TExpQ a] -> TExpQ [a]
+tlistE = unsafeTExpCoerce . listE . fmap unTypeQ
 
 readWrite_
     :: forall addr' addr s dom dat. (Typeable addr')
