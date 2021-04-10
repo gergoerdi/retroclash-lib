@@ -25,6 +25,7 @@ import Data.List as L
 import Data.Function (on)
 
 import Language.Haskell.TH hiding (Type)
+import Language.Haskell.TH.Syntax hiding (Type, lift)
 import qualified Language.Haskell.TH.Syntax as TH
 
 data Handle s addr = Handle Name
@@ -43,7 +44,7 @@ type Connection = Name
 -- | (out :: FanIn dom dat)
 type Out = ExpQ
 
-newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
+newtype Addressing (s :: Type) (dom :: Domain) (addr0 :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
           (Exp, Matcher, Name)                                                  -- (wr, matcher, addr)
           ([(Name, Component)], [(Name, Matcher)], [(Name, Connection)], [Out]) -- (components, matcher binds, connections, outs)
@@ -62,7 +63,7 @@ listMap =
 
 compile
     :: forall addr dom a. ()
-    => (forall s. Addressing s addr ())
+    => (forall s. Addressing s dom addr addr ())
     -> Q (ExpQ -> ExpQ, [Dec], ExpQ)
 compile addressing = do
     addr <- newName "addr"
@@ -87,29 +88,31 @@ compile addressing = do
 
     return (wrapper, decs, [| fmap (fromMaybe (Just 0) . getFirst) (getAp $out) |])
 
-memoryMap_ :: forall addr. ExpQ -> ExpQ -> (forall s. Addressing s addr ()) -> ExpQ
+memoryMap_ :: forall addr dom. ExpQ -> ExpQ -> (forall s. Addressing s dom addr addr ()) -> ExpQ
 memoryMap_ addr wr addressing = do
     (wrapper, decs, rd) <- compile addressing
     [| $(wrapper $ LetE decs <$> rd) $addr $wr |]
 
 matchAddr
-    :: ExpQ
-    -> Addressing s addr' a
-    -> Addressing s addr a
+    :: forall addr' addr a s dom addr0. TExpQ (addr -> Maybe addr')
+    -> Addressing s dom addr0 addr' a
+    -> Addressing s dom addr0 addr a
 matchAddr match body = Addressing $ do
     addr' <- lift $ newName "addr"
     censor (\(coms, matchers, conns, outs) -> (coms, matchers, conns, [applyMask addr' outs])) $
         RWST $ \(wr, matcher, addr) s -> do
-            let matcher' = restrict matcher
-            runRWST (tell (mempty, [(addr', matcher')], mempty, mempty) >> runAddressing body) (wr, matcher', addr') s
+            let matcher' = restrict (unsafeTExpCoerce matcher)
+            runRWST (tell (mempty, [(addr', unTypeQ matcher')], mempty, mempty) >> runAddressing body) (wr, unTypeQ matcher', addr') s
   where
-    restrict matcher = [| fmap ((=<<) $match) . $matcher |]
+    restrict :: TExpQ (Signal dom addr0 -> Signal dom (Maybe addr)) -> TExpQ (Signal dom addr0 -> Signal dom (Maybe addr'))
+
+    restrict matcher = [|| fmap ((=<<) $$match) . $$matcher ||]
     applyMask addr' outs = [| mask (delay False $ isJust <$> $(varE addr')) $ mconcat $(listE outs) |]
 
 readWrite_
-    :: forall addr' s addr. ()
+    :: forall addr' addr s dom addr0. ()
     => (Exp -> Exp -> ExpQ)
-    -> Addressing s addr (Handle s addr')
+    -> Addressing s dom addr0 addr (Handle s addr')
 readWrite_ component = Addressing $ do
     h@(Handle rd) <- Handle <$> (lift $ newName "rd")
     (wr, _, _) <- ask
@@ -121,7 +124,7 @@ romFromVec
     :: (1 <= n)
     => SNat n
     -> ExpQ
-    -> Addressing s addr (Handle s (Index n))
+    -> Addressing s dom addr0 addr (Handle s (Index n))
 romFromVec size@SNat xs = readWrite_ $ \(pure -> addr) _wr ->
     [| fmap Just $ rom $xs (maybe 0 bitCoerce <$> $addr) |]
 
@@ -129,7 +132,7 @@ ramFromFile
     :: (1 <= n)
     => SNat n
     -> ExpQ
-    -> Addressing s addr (Handle s (Index n))
+    -> Addressing s dom addr0 addr (Handle s (Index n))
 ramFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) (pure -> wr) ->
     [| fmap (Just . unpack) $
        singlePort (blockRamFile size $fileName)
@@ -138,15 +141,15 @@ ramFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) (pure -> wr) ->
      |]
 
 from
-    :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
+    :: forall addr' s dom addr0 addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
     => addr
-    -> Addressing s addr' a
-    -> Addressing s addr a
-from base = matchAddr [| from_ $(TH.lift (base :: addr)) $(TH.lift (maxBound :: addr')) |]
+    -> Addressing s dom addr0 addr' a
+    -> Addressing s dom addr0 addr a
+from base = matchAddr [|| from_ $$(liftTyped (base :: addr)) $$(liftTyped (maxBound :: addr')) ||]
 
 connect
     :: Handle s addr
-    -> Addressing s addr ()
+    -> Addressing s dom addr0 addr ()
 connect (Handle comp) = Addressing $ do
     (_, _, addr) <- ask
     tell (mempty, mempty, [(comp, addr)], [varE comp])
