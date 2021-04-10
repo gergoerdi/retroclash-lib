@@ -15,34 +15,31 @@ module RetroClash.Memory
 
 import Clash.Prelude hiding (Exp, lift)
 import RetroClash.Utils
-import RetroClash.Port
 import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
-import Data.Kind
+import Data.Kind (Type)
 
 import Data.Map as Map
-import Data.List as L
-import Data.Function (on)
 
 import Language.Haskell.TH hiding (Type)
-import Language.Haskell.TH.Syntax hiding (Type, lift)
 import qualified Language.Haskell.TH.Syntax as TH
 
 data Handle s (addr :: Type) = Handle Name
 
 type FanIn dom a = Signal dom `Ap` First (Maybe a)
 
-type Component s dom dat = ExpQ {-(Signal dom (Maybe addr))-} -> ExpQ {-(Signal dom (Maybe dat))-}
+type MkComponent s dom dat = ExpQ {-(Signal dom (Maybe addr))-} -> ExpQ {-(Signal dom (Maybe dat))-}
+type AddrIn s dom = ExpQ {-(Signal dom (Maybe addr))-}
 
-type Connections s dom = [ExpQ {-(Signal dom (Maybe addr))-}]
+type AddrIns s dom = [AddrIn s dom]
 
 newtype ComponentMap s dom dat = ComponentMap
-    { components :: Map Name (Component s dom dat) }
+    { components :: Map Name (MkComponent s dom dat) }
     deriving newtype (Semigroup, Monoid)
 
 newtype ConnectionMap s dom = ConnectionMap
-    { connections :: Map Name (Connections s dom) }
+    { connections :: Map Name (AddrIns s dom) }
     deriving newtype (Monoid)
 
 instance Semigroup (ConnectionMap s dom) where
