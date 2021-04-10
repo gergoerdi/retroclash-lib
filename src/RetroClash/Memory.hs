@@ -1,6 +1,7 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE GADTs #-}
 
 module RetroClash.Memory
     ( memoryMap_
@@ -35,8 +36,12 @@ type FanIn dom dat = Signal dom `Ap` First (Maybe dat)
 -- | (muxAddr :: Signal dom (Maybe addr)) -> (rd :: FanIn dom dat, x :: a)
 type Component = Exp -> DecsQ
 
--- | (matcher :: Signal dom (Maybe addr) -> Signal dom (Maybe addr'))
-type Matcher = ExpQ
+-- | (matcher :: Signal dom (Maybe addr0) -> Signal dom (Maybe addr))
+-- newtype Matcher dom addr0 addr = Matcher{ runMatcher :: ExpQ }
+type Matcher dom addr0 addr = TExpQ (Signal dom (Maybe addr0) -> Signal dom (Maybe addr))
+
+data SomeMatcher dom addr0 where
+    MkSomeMatcher :: Matcher dom addr0 addr -> SomeMatcher dom addr0
 
 -- | (addr :: Signal dom (Maybe addr))
 type Connection = Name
@@ -46,8 +51,8 @@ type Out = ExpQ
 
 newtype Addressing (s :: Type) (dom :: Domain) (addr0 :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
-          (Exp, Matcher, Name)                                                  -- (wr, matcher, addr)
-          ([(Name, Component)], [(Name, Matcher)], [(Name, Connection)], [Out]) -- (components, matcher binds, connections, outs)
+          (Exp, Matcher dom addr0 addr, Name)                                                  -- (wr, matcher, addr)
+          ([(Name, Component)], [(Name, SomeMatcher dom addr0)], [(Name, Connection)], [Out]) -- (components, matcher binds, connections, outs)
           ()
           Q
           a
@@ -68,7 +73,7 @@ compile
 compile addressing = do
     addr <- newName "addr"
     wr <- newName "wr"
-    ((), (coms, mbs, listMap -> conns, outs)) <- evalRWST (runAddressing addressing) (VarE wr, [|id|], addr) ()
+    ((), (coms, mbs, listMap -> conns, outs)) <- evalRWST (runAddressing addressing) (VarE wr, [||id||], addr) ()
 
     muxs <- forM conns $ \ addrs -> do
         mux <- newName "muxAddr"
@@ -79,7 +84,7 @@ compile addressing = do
             Just (mux, _) -> varE mux
             Nothing -> [| pure Nothing |]
         mkCom mux
-    mbDecs <- fmap mconcat $ mapM (\(nm, matcher) -> [d| $(varP nm) = $matcher $(varE addr) |]) mbs
+    mbDecs <- fmap mconcat $ mapM (\(nm, MkSomeMatcher matcher) -> [d| $(varP nm) = $(unTypeQ matcher) $(varE addr) |]) mbs
 
     let wrapper body = [| \ $(varP addr) $(varP wr) -> $body |]
         out = [| mconcat $(listE outs) |]
@@ -101,12 +106,12 @@ matchAddr match body = Addressing $ do
     addr' <- lift $ newName "addr"
     censor (\(coms, matchers, conns, outs) -> (coms, matchers, conns, [applyMask addr' outs])) $
         RWST $ \(wr, matcher, addr) s -> do
-            let matcher' = restrict (unsafeTExpCoerce matcher)
-            runRWST (tell (mempty, [(addr', unTypeQ matcher')], mempty, mempty) >> runAddressing body) (wr, unTypeQ matcher', addr') s
+            let matcher' = restrict matcher
+            runRWST (tell (mempty, [(addr', MkSomeMatcher matcher')], mempty, mempty) >> runAddressing body) (wr, matcher', addr') s
   where
-    restrict :: TExpQ (Signal dom addr0 -> Signal dom (Maybe addr)) -> TExpQ (Signal dom addr0 -> Signal dom (Maybe addr'))
-
+    restrict :: Matcher dom addr0 addr -> Matcher dom addr0 addr'
     restrict matcher = [|| fmap ((=<<) $$match) . $$matcher ||]
+
     applyMask addr' outs = [| mask (delay False $ isJust <$> $(varE addr')) $ mconcat $(listE outs) |]
 
 readWrite_
