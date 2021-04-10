@@ -131,7 +131,11 @@ ramFromFile
     -> ExpQ
     -> Addressing s addr (Handle s (Index n))
 ramFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) (pure -> wr) ->
-    [| fmap (Just . unpack) $ blockRamFile size $fileName (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr)) |]
+    [| fmap (Just . unpack) $
+       singlePort (blockRamFile size $fileName)
+         (fromMaybe 0 <$> $addr)
+         (fmap pack <$> $wr)
+     |]
 
 from
     :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
