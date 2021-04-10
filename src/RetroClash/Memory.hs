@@ -3,25 +3,18 @@
 {-# LANGUAGE RankNTypes #-}
 
 module RetroClash.Memory
-    ( memoryMap, memoryMap_
+    ( memoryMap_
 
-    , conduit, readWrite, readWrite_
-    , romFromVec, romFromFile
-    , ram0, ramFromFile
-    , port, port_
+    , romFromVec
+    , ramFromFile
     , connect
 
-    , override
-
     , from
-    , matchLeft, matchRight
-    , tag
     ) where
 
 import Clash.Prelude hiding (Exp, lift)
 import RetroClash.Utils
 import RetroClash.Port
-import Control.Arrow (first)
 import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
@@ -67,44 +60,14 @@ listMap =
     groupBy ((==) `on` fst) .
     sortBy (compare `on` fst)
 
-class Backpane a where
-    backpane :: a -> ExpQ
-
-instance (Backpane a1, Backpane a2) => Backpane (a1, a2) where
-    backpane (x1, x2) = [| ($(backpane x1), $(backpane x2)) |]
-
-instance (Backpane a1, Backpane a2, Backpane a3) => Backpane (a1, a2, a3) where
-    backpane (x1, x2, x3) = [| ($(backpane x1), $(backpane x2), $(backpane x3)) |]
-
-instance Backpane () where
-    backpane () = [|()|]
-
-data Result = Result Name
-    deriving Show
-
-instance Backpane Result where
-    backpane (Result nm) = varE nm
-
-data Addr = Addr Name
-    deriving Show
-
-instance Backpane Addr where
-    backpane (Addr nm) = varE nm
-
-data WR = WR Name
-    deriving Show
-
-instance Backpane WR where
-    backpane (WR nm) = varE nm
-
 compile
-    :: forall addr dom a. (Backpane a)
-    => (forall s. Addressing s addr a)
-    -> Q (ExpQ -> ExpQ, [Dec], ExpQ, ExpQ)
+    :: forall addr dom a. ()
+    => (forall s. Addressing s addr ())
+    -> Q (ExpQ -> ExpQ, [Dec], ExpQ)
 compile addressing = do
     addr <- newName "addr"
     wr <- newName "wr"
-    (x, (coms, mbs, listMap -> conns, outs)) <- evalRWST (runAddressing addressing) (VarE wr, [|id|], addr) ()
+    ((), (coms, mbs, listMap -> conns, outs)) <- evalRWST (runAddressing addressing) (VarE wr, [|id|], addr) ()
 
     muxs <- forM conns $ \ addrs -> do
         mux <- newName "muxAddr"
@@ -122,20 +85,12 @@ compile addressing = do
 
         decs = mconcat [muxDecs, comDecs, mbDecs]
 
-    return (wrapper, decs, [| fmap (fromMaybe (Just 0) . getFirst) (getAp $out) |], backpane x)
-
-memoryMap :: forall addr a. Backpane a => ExpQ -> ExpQ -> (forall s. Addressing s addr a) -> ExpQ
-memoryMap addr wr addressing = do
-    (wrapper, decs, rd, x) <- compile addressing
-    [| $(wrapper $ LetE decs <$> [| ($rd, $x) |]) $addr $wr |]
+    return (wrapper, decs, [| fmap (fromMaybe (Just 0) . getFirst) (getAp $out) |])
 
 memoryMap_ :: forall addr. ExpQ -> ExpQ -> (forall s. Addressing s addr ()) -> ExpQ
 memoryMap_ addr wr addressing = do
-    (wrapper, decs, rd, _) <- compile addressing
+    (wrapper, decs, rd) <- compile addressing
     [| $(wrapper $ LetE decs <$> rd) $addr $wr |]
-
--- packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
--- packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
 
 matchAddr
     :: ExpQ
@@ -151,41 +106,16 @@ matchAddr match body = Addressing $ do
     restrict matcher = [| fmap ((=<<) $match) . $matcher |]
     applyMask addr' outs = [| mask (delay False $ isJust <$> $(varE addr')) $ mconcat $(listE outs) |]
 
-readWrite
-    :: forall addr' s addr. ()
-    => (Exp -> Exp -> ExpQ)
-    -> Addressing s addr (Handle s addr', Result)
-readWrite component = Addressing $ do
-    h@(Handle rd) <- Handle <$> (lift $ newName "rd")
-    x <- lift $ newName "x"
-    (wr, _, _) <- ask
-    let comp = \muxAddr -> [d| ($(varP rd), $(varP x)) = first strong $(component muxAddr wr) |]
-    tell ([(rd, comp)], mempty, mempty, mempty)
-    return (h, Result x)
-
-conduit
-    :: forall addr' s addr. ()
-    => ExpQ
-    -> Addressing s addr (Handle s addr', Addr, WR)
-conduit mkConduit = Addressing $ do
-    h@(Handle rd) <- Handle <$> (lift $ newName "rd")
-    addr' <- lift $ newName "conduitAddr"
-    wr' <- lift $ newName "conduitWrite"
-    (wr, _, _) <- ask
-    let comp = \muxAddr ->
-          [d|
-             $(varP rd) = strong $mkConduit
-             $(varP addr') = $(pure muxAddr)
-             $(varP wr') = $(pure wr)
-          |]
-    tell ([(rd, comp)], mempty, mempty, mempty)
-    return (h, Addr addr', WR wr')
-
 readWrite_
     :: forall addr' s addr. ()
     => (Exp -> Exp -> ExpQ)
     -> Addressing s addr (Handle s addr')
-readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
+readWrite_ component = Addressing $ do
+    h@(Handle rd) <- Handle <$> (lift $ newName "rd")
+    (wr, _, _) <- ask
+    let comp = \muxAddr -> [d| $(varP rd) = strong $(component muxAddr wr) |]
+    tell ([(rd, comp)], mempty, mempty, mempty)
+    return h
 
 romFromVec
     :: (1 <= n)
@@ -195,21 +125,6 @@ romFromVec
 romFromVec size@SNat xs = readWrite_ $ \(pure -> addr) _wr ->
     [| fmap Just $ rom $xs (maybe 0 bitCoerce <$> $addr) |]
 
-romFromFile
-    :: (1 <= n)
-    => SNat n
-    -> ExpQ
-    -> Addressing s addr (Handle s (Index n))
-romFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) _wr ->
-    [| fmap (Just . unpack) $ romFilePow2 $fileName (maybe 0 bitCoerce <$> $addr) |]
-
-ram0
-    :: (1 <= n)
-    => SNat n
-    -> Addressing s addr (Handle s (Index n))
-ram0 size@SNat = readWrite_ $ \(pure -> addr) (pure -> wr) ->
-    [| fmap Just $ blockRam1 ClearOnReset $(TH.lift size) 0 (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
-
 ramFromFile
     :: (1 <= n)
     => SNat n
@@ -217,44 +132,6 @@ ramFromFile
     -> Addressing s addr (Handle s (Index n))
 ramFromFile size@SNat fileName = readWrite_ $ \(pure -> addr) (pure -> wr) ->
     [| fmap (Just . unpack) $ blockRamFile size $fileName (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr)) |]
-
-port
-    :: forall addr' a s addr. ()
-    => ExpQ
-    -> Addressing s addr (Handle s addr', Result)
-port mkPort = readWrite $ \(pure -> addr) (pure -> wr) ->
-  [| let (read, x) = $mkPort $ portFromAddr $addr $wr
-     in (delay Nothing read, x) |]
-
-port_
-    :: forall addr' s addr. ()
-    => ExpQ
-    -> Addressing s addr (Handle s addr')
-port_ mkPort = readWrite_ $ \(pure -> addr) (pure -> wr) ->
-  [| let read = $mkPort $ portFromAddr $addr $wr in delay Nothing read |]
-
-tag
-    :: (Lift addr')
-    => addr'
-    -> Addressing s (addr', addr) a
-    -> Addressing s addr a
-tag t = matchAddr [| \addr -> Just ($(TH.lift t), addr) |]
-
-matchLeft
-    :: Addressing s addr1 a
-    -> Addressing s (Either addr1 addr2) a
-matchLeft = matchAddr [| either Just (const Nothing) |]
-
-matchRight
-    :: Addressing s addr2 a
-    -> Addressing s (Either addr1 addr2) a
-matchRight = matchAddr [| either (const Nothing) Just |]
-
-override
-    :: ExpQ
-    -> Addressing s addr ()
-override sig = Addressing $ do
-    tell (mempty, mempty, mempty, [ [| weak $sig |] ])
 
 from
     :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
