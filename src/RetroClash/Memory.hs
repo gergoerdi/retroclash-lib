@@ -23,6 +23,7 @@ import Control.Monad
 import Control.Monad.RWS
 import Data.Kind (Type)
 
+import Data.List as L
 import Data.Map as Map
 
 import Language.Haskell.TH hiding (Type)
@@ -59,7 +60,7 @@ instance Semigroup (ConnectionMap s dom) where
 newtype Addressing (s :: Type) (dom :: Domain) (dat :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
           (ExpQ {-(Signal dom (Maybe addr))-}, ExpQ {-(Signal dom (Maybe dat))-})
-          (DecsQ, ComponentMap s dom dat, ConnectionMap s dom, [ExpQ {-(FanIn dom dat)-}])
+          (DecsQ, ComponentMap s dom dat, ConnectionMap s dom)
           ()
           Q
           a
@@ -73,20 +74,20 @@ compile
     -> ExpQ {-(Signal dom (Maybe dat))-}
     -> ExpQ {-(Signal dom (Maybe dat))-}
 compile addressing addr wr = do
-    ((), (decs, components -> comps, connections -> conns, outs)) <- evalRWST (runAddressing addressing) (addr, wr) ()
+    ((), (decs, components -> comps, connections -> conns)) <- evalRWST (runAddressing addressing) (addr, wr) ()
 
-    let compDecs = mconcat
-            [ [d| $(varP nm) = $rd |]
+    let (outs, compDecs) = L.unzip
+            [ (varE nm, [d| $(varP nm) = $rd |])
             | (nm, mkComp) <- Map.toList comps
             , let addrIn = case Map.lookup nm conns of
                       Just addrs -> [| muxA $(listE addrs) |]
                       Nothing -> [| pure Nothing |]
-            , let rd = mkComp addrIn
+            , let rd = [| let addr = $addrIn in mask (delay False $ isJust <$> addr) $(mkComp [| addr |]) |]
             ]
 
     let out = [| fmap (fromMaybe (Just 0) . getFirst) . getAp $ mconcat $(listE outs) |]
 
-    decs <- decs <> compDecs
+    decs <- mconcat (decs:compDecs)
     letE (pure <$> decs) out
 
 memoryMap_
@@ -108,19 +109,15 @@ matchAddr
 matchAddr match body = Addressing $ do
     nm <- lift $ newName "addr"
     let addr' = varE nm
-    censor (\(decls, comps, conns, outs) -> (decls, comps, conns, [applyMask addr' outs])) $
-        RWST $ \(addr, wr) s -> do
-            let dec = [d| $(varP nm) = $(restrict addr) |]
-            runRWST
-              (tell (dec, mempty, mempty, mempty) >> runAddressing body)
-              (addr', wr)
-              s
+    RWST $ \(addr, wr) s -> do
+        let dec = [d| $(varP nm) = $(restrict addr) |]
+        runRWST
+          (tell (dec, mempty, mempty) >> runAddressing body)
+          (addr', wr)
+          s
   where
     restrict :: ExpQ {-(Signal dom (Maybe addr))-} -> ExpQ {-(Signal dom (Maybe addr'))-}
     restrict addr = [| (>>= $match) <$> $addr |]
-
-    applyMask :: ExpQ {-(Signal dom (Maybe addr'))-} -> [ExpQ {-(FanIn dom dat)-}] -> ExpQ {-(FanIn dom dat)-}
-    applyMask addr' outs = [| mask (delay False $ isJust <$> $addr') (mconcat $(listE outs)) |]
 
 readWrite_
     :: forall addr' addr s dom dat. ()
@@ -130,7 +127,7 @@ readWrite_ component = Addressing $ do
     h@(Handle nm) <- Handle <$> (lift $ newName "rd")
     (_, wr) <- ask
     let comp = \addr -> [| strong $(component addr wr) |]
-    tell (mempty, ComponentMap $ Map.singleton nm comp, mempty, mempty)
+    tell (mempty, ComponentMap $ Map.singleton nm comp, mempty)
     return h
 
 romFromVec
@@ -164,9 +161,7 @@ connect
     -> Addressing s dom dat addr ()
 connect h@(Handle nm) = Addressing $ do
     (addr, _) <- ask
-    let conn = ConnectionMap $ Map.singleton nm [addr]
-        out = varE nm
-    tell (mempty, mempty, conn, [out])
+    tell (mempty, mempty, ConnectionMap $ Map.singleton nm [addr])
 
 from_ :: forall addr' addr. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr -> addr' -> addr -> Maybe addr'
