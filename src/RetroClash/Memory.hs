@@ -30,26 +30,31 @@ data Handle s (addr :: Type) = Handle Name
 
 type FanIn dom a = Signal dom `Ap` First (Maybe a)
 
-type MkComponent s dom dat = ExpQ {-(Signal dom (Maybe addr))-} -> ExpQ {-(Signal dom (Maybe dat))-}
-type AddrIn s dom = ExpQ {-(Signal dom (Maybe addr))-}
+-- | type MkComponent dom dat addr = TExpQ (Signal dom (Maybe addr)) -> TExpQ (Signal dom (Maybe dat)
+type MkComponent = ExpQ -> ExpQ
 
-type AddrIns s dom = [AddrIn s dom]
+-- | type Addr dom addr = TExpQ (Signal dom (Maybe addr))
+type Addr = ExpQ
+type Addrs = [Addr]
 
-newtype ComponentMap s dom dat = ComponentMap
-    { components :: Map Name (MkComponent s dom dat) }
+-- | type Dat dom dat = TExpQ (Signal dom (Maybe dat))
+type Dat = ExpQ
+
+newtype ComponentMap = ComponentMap
+    { components :: Map Name MkComponent }
     deriving newtype (Semigroup, Monoid)
 
-newtype ConnectionMap s dom = ConnectionMap
-    { connections :: Map Name (AddrIns s dom) }
+newtype ConnectionMap = ConnectionMap
+    { connections :: Map Name Addrs }
     deriving newtype (Monoid)
 
-instance Semigroup (ConnectionMap s dom) where
+instance Semigroup ConnectionMap where
     ConnectionMap m1 <> ConnectionMap m2 = ConnectionMap $ Map.unionWith (<>) m1 m2
 
-newtype Addressing (s :: Type) (dom :: Domain) (dat :: Type) (addr :: Type) (a :: Type) = Addressing
+newtype Addressing (s :: Type) (dat :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
-          (ExpQ {-(Signal dom (Maybe addr))-}, ExpQ {-(Signal dom (Maybe dat))-})
-          (DecsQ, ComponentMap s dom dat, ConnectionMap s dom)
+          (Addr, Dat)
+          (DecsQ, ComponentMap, ConnectionMap)
           ()
           Q
           a
@@ -57,11 +62,11 @@ newtype Addressing (s :: Type) (dom :: Domain) (dat :: Type) (addr :: Type) (a :
     deriving newtype (Functor, Applicative, Monad)
 
 compile
-    :: forall addr dom dat a b. ()
-    => (forall s. Addressing s dom dat addr ())
-    -> ExpQ {-(Signal dom (Maybe addr))-}
-    -> ExpQ {-(Signal dom (Maybe dat))-}
-    -> ExpQ {-(Signal dom (Maybe dat))-}
+    :: forall addr dat a b. ()
+    => (forall s. Addressing s dat addr ())
+    -> Addr
+    -> Dat
+    -> Dat
 compile addressing addr wr = do
     ((), (decs, components -> comps, connections -> conns)) <- evalRWST (runAddressing addressing) (addr, wr) ()
 
@@ -80,21 +85,21 @@ compile addressing addr wr = do
     letE (pure <$> decs) out
 
 memoryMap_
-    :: forall addr dat dom. ()
-    => ExpQ {-(Signal dom (Maybe addr))-}
-    -> ExpQ {-(Signal dom (Maybe dat))-}
-    -> (forall s. Addressing s dom dat addr ())
-    -> ExpQ {-(Signal dom (Maybe dat))-}
+    :: forall addr dat. ()
+    => Addr
+    -> Dat
+    -> (forall s. Addressing s dat addr ())
+    -> Dat
 memoryMap_ addr wr addressing =
     [| let addr' = $addr; wr' = $wr
         in $(compile addressing [| addr' |] [| wr' |])
     |]
 
 matchAddr
-    :: forall addr' addr a s dom dat. ()
+    :: forall addr' addr a s dat. ()
     => ExpQ {-(addr -> Maybe addr')-}
-    -> Addressing s dom dat addr' a
-    -> Addressing s dom dat addr a
+    -> Addressing s dat addr' a
+    -> Addressing s dat addr a
 matchAddr match body = Addressing $ do
     nm <- lift $ newName "addr"
     let addr' = varE nm
@@ -105,13 +110,13 @@ matchAddr match body = Addressing $ do
           (addr', wr)
           s
   where
-    restrict :: ExpQ {-(Signal dom (Maybe addr))-} -> ExpQ {-(Signal dom (Maybe addr'))-}
+    restrict :: Addr -> Addr
     restrict addr = [| (>>= $match) <$> $addr |]
 
 readWrite_
-    :: forall addr' addr s dom dat. ()
-    => (ExpQ {-(Signal dom (Maybe addr'))-} -> ExpQ {-(Signal dom (Maybe dat))-} -> ExpQ {-(Signal dom (Maybe dat))-})
-    -> Addressing s dom dat addr (Handle s addr')
+    :: forall addr' addr s dat. ()
+    => (Addr -> Dat -> Dat)
+    -> Addressing s dat addr (Handle s addr')
 readWrite_ component = Addressing $ do
     h@(Handle nm) <- Handle <$> (lift $ newName "rd")
     (_, wr) <- ask
@@ -123,14 +128,14 @@ romFromVec
     :: (1 <= n)
     => SNat n
     -> ExpQ {-(Vec n dat)-}
-    -> Addressing s dom dat addr (Handle s (Index n))
+    -> Addressing s dat addr (Handle s (Index n))
 romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
     [| fmap Just $ rom $xs (bitCoerce . fromJustX <$> $addr) |]
 
 ramFromFile
     :: SNat n
     -> ExpQ {-FilePath-}
-    -> Addressing s dom dat addr (Handle s (Index n))
+    -> Addressing s dat addr (Handle s (Index n))
 ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     [| fmap (Just . unpack) $
      blockRamFile size $fileName
@@ -139,15 +144,15 @@ ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     |]
 
 from
-    :: forall addr' s dom dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
+    :: forall addr' s dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
     => addr
-    -> Addressing s dom dat addr' a
-    -> Addressing s dom dat addr a
+    -> Addressing s dat addr' a
+    -> Addressing s dat addr a
 from base = matchAddr [| from_ $(TH.lift (base :: addr)) $(TH.lift (maxBound :: addr')) |]
 
 connect
     :: Handle s addr
-    -> Addressing s dom dat addr ()
+    -> Addressing s dat addr ()
 connect h@(Handle nm) = Addressing $ do
     (addr, _) <- ask
     tell (mempty, mempty, ConnectionMap $ Map.singleton nm [addr])
