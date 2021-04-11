@@ -169,12 +169,13 @@ conduit
 conduit rdExt = Addressing $ do
     h@(Handle nm) <- Handle <$> (lift $ newName "rd")
     (_, wr) <- ask
+    wrExt <- lift $ newName "wrExt"
     addrExt <- lift $ newName "addrExt"
     let comp = \addr ->
           [| let addr' = $addr
-             in (addr', mask (delay False $ isJust <$> addr') . strong $ $rdExt) |]
-    tell (mempty, ComponentMap $ Map.singleton nm ([p|($(varP nm), $(varP addrExt))|], comp), mempty)
-    return (h, Result (varE addrExt), Result wr)
+             in (mask (delay False $ isJust <$> addr') . strong $ $rdExt, addr', $wr) |]
+    tell (mempty, ComponentMap $ Map.singleton nm ([p|($(varP nm), $(varP addrExt), $(varP wrExt))|], comp), mempty)
+    return (h, Result (varE addrExt), Result (varE wrExt))
 
 readWrite
     :: forall addr' addr s dat. ()
