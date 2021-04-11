@@ -20,6 +20,7 @@ module RetroClash.Memory
 
 import Clash.Prelude hiding (Exp, lift)
 import RetroClash.Utils
+import RetroClash.Port
 import Data.Maybe
 import Control.Monad
 import Control.Monad.RWS
