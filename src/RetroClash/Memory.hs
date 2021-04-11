@@ -108,13 +108,17 @@ compile
 compile addressing addr wr = do
     (x, (decs, components -> comps, connections -> conns)) <- evalRWST (runAddressing addressing) (addr, wr) ()
 
-    let (outs, compDecs) = L.unzip
-            [ (varE nm, [d| $pat = $(mkComp addrIn) |])
-            | (nm, (pat, mkComp)) <- Map.toList comps
-            , let addrIn = case Map.lookup nm conns of
-                      Just addrs -> [| muxA $(listE addrs) |]
-                      Nothing -> [| pure Nothing |]
-            ]
+    (outs, compDecs) <- fmap L.unzip $ forM (Map.toList comps) $ \(nm, (pat, mkComp)) -> do
+        let addrIn = case Map.lookup nm conns of
+                Just addrs -> [| muxA $(listE addrs) |]
+                Nothing -> [| pure Nothing |]
+        masked <- newName "masked"
+        let def =
+                [d| ($pat, $(varP masked)) =
+                        let addr = $addrIn
+                        in ($(mkComp [|addr|]), mask (delay False $ isJust <$> addr) $(varE nm))
+                |]
+        return (varE masked, def)
 
     let out = [| fmap (fromMaybe (Just 0) . getFirst) . getAp $ mconcat $(listE outs) |]
 
@@ -183,8 +187,7 @@ conduit rdExt = Addressing $ do
     wrExt <- lift $ newName "wrExt"
     addrExt <- lift $ newName "addrExt"
     let comp = \addr ->
-          [| let addr' = $addr
-             in (mask (delay False $ isJust <$> addr') . strong $ $rdExt, addr', $wr) |]
+          [| (strong $rdExt, $addr, $wr) |]
     tell (mempty, ComponentMap $ Map.singleton nm ([p|($(varP nm), $(varP addrExt), $(varP wrExt))|], comp), mempty)
     return (h, Result (varE addrExt), Result (varE wrExt))
 
@@ -196,10 +199,7 @@ readWrite component = Addressing $ do
     h@(Handle nm) <- Handle <$> (lift $ newName "rd")
     (_, wr) <- ask
     back <- lift $ newName "back"
-    let comp = \addr ->
-          [| let addr' = $addr
-             in first (mask (delay False $ isJust <$> addr') . strong) $(component [|addr'|] wr)
-          |]
+    let comp = \addr -> [| first strong $(component addr wr) |]
     tell (mempty, ComponentMap $ Map.singleton nm ([p|($(varP nm), $(varP back))|], comp), mempty)
     return (h, Result (varE back))
 
