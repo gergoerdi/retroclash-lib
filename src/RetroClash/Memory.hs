@@ -1,7 +1,6 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE GADTs #-}
 
 module RetroClash.Memory
     ( memoryMap_
