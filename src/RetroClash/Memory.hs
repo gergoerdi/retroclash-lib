@@ -5,13 +5,19 @@ module RetroClash.Memory
     ( RAM, ROM, Port, Port_
     , packRam
 
-    , memoryMap_
+    , memoryMap, memoryMap_
 
-    , romFromVec
-    , ramFromFile
+    , conduit, readWrite, readWrite_
+    , romFromVec, romFromFile
+    , ram0, ramFromFile
+    , port, port_
     , connect
 
+    , override
+
     , from
+    , matchLeft, matchRight
+    , tag
     ) where
 
 import Clash.Prelude hiding (Exp, lift)
@@ -134,6 +140,21 @@ memoryMap_
     -> Dat
 memoryMap_ addr wr addressing = [| fst $(memoryMap addr wr addressing) |]
 
+connect
+    :: Handle s addr
+    -> Addressing s addr ()
+connect h@(Handle nm) = Addressing $ do
+    (addr, _) <- ask
+    tell (mempty, mempty, ConnectionMap $ Map.singleton nm [addr])
+
+override
+    :: ExpQ
+    -> Addressing s addr ()
+override sig = Addressing $ do
+    nm <- lift $ newName "override"
+    let comp = \_ -> [| weak $sig |]
+    tell (mempty, ComponentMap $ Map.singleton nm (varP nm, comp), mempty)
+
 matchAddr
     :: forall addr' addr a s dat. ()
     => ExpQ {-(addr -> Maybe addr')-}
@@ -151,6 +172,20 @@ matchAddr match body = Addressing $ do
   where
     restrict :: Addr -> Addr
     restrict addr = [| (>>= $match) <$> $addr |]
+
+conduit
+    :: forall addr' s addr. ()
+    => ExpQ
+    -> Addressing s addr (Handle s addr', Result, Result)
+conduit rdExt = Addressing $ do
+    h@(Handle nm) <- Handle <$> (lift $ newName "rd")
+    (_, wr) <- ask
+    addrExt <- lift $ newName "addrExt"
+    let comp = \addr ->
+          [| let addr' = $addr
+             in (addr', mask (delay False $ isJust <$> addr') . strong $ $rdExt) |]
+    tell (mempty, ComponentMap $ Map.singleton nm ([p|($(varP nm), $(varP addrExt))|], comp), mempty)
+    return (h, Result (varE addrExt), Result wr)
 
 readWrite
     :: forall addr' addr s dat. ()
@@ -181,6 +216,21 @@ romFromVec
 romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
     [| fmap Just $ rom $xs (bitCoerce . fromJustX <$> $addr) |]
 
+romFromFile
+    :: (1 <= n)
+    => SNat n
+    -> ExpQ
+    -> Addressing s addr (Handle s (Index n))
+romFromFile size@SNat fileName = readWrite_ $ \addr _wr ->
+    [| fmap (Just . unpack) $ romFilePow2 $fileName (maybe 0 bitCoerce <$> $addr) |]
+
+ram0
+    :: (1 <= n)
+    => SNat n
+    -> Addressing s addr (Handle s (Index n))
+ram0 size@SNat = readWrite_ $ \addr wr ->
+    [| fmap Just $ blockRam1 NoClearOnReset $(TH.lift size) 0 (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
+
 ramFromFile
     :: SNat n
     -> ExpQ {-FilePath-}
@@ -192,6 +242,21 @@ ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
        (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr))
     |]
 
+port
+    :: forall addr' a s addr. ()
+    => ExpQ
+    -> Addressing s addr (Handle s addr', Result)
+port mkPort = readWrite $ \addr wr ->
+  [| let (read, x) = $mkPort $ portFromAddr $addr $wr
+     in (delay Nothing read, x) |]
+
+port_
+    :: forall addr' s addr. ()
+    => ExpQ
+    -> Addressing s addr (Handle s addr')
+port_ mkPort = readWrite_ $ \addr wr ->
+  [| let read = $mkPort $ portFromAddr $addr $wr in delay Nothing read |]
+
 from
     :: forall addr' s addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
     => addr
@@ -199,12 +264,22 @@ from
     -> Addressing s addr a
 from base = matchAddr [| from_ $(TH.lift (base :: addr)) $(TH.lift (maxBound :: addr')) |]
 
-connect
-    :: Handle s addr
-    -> Addressing s addr ()
-connect h@(Handle nm) = Addressing $ do
-    (addr, _) <- ask
-    tell (mempty, mempty, ConnectionMap $ Map.singleton nm [addr])
+tag
+    :: (Lift addr')
+    => addr'
+    -> Addressing s (addr', addr) a
+    -> Addressing s addr a
+tag t = matchAddr [| \addr -> Just ($(TH.lift t), addr) |]
+
+matchLeft
+    :: Addressing s addr1 a
+    -> Addressing s (Either addr1 addr2) a
+matchLeft = matchAddr [| either Just (const Nothing) |]
+
+matchRight
+    :: Addressing s addr2 a
+    -> Addressing s (Either addr1 addr2) a
+matchRight = matchAddr [| either (const Nothing) Just |]
 
 from_ :: forall addr' addr. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr -> addr' -> addr -> Maybe addr'
