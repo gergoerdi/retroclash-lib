@@ -22,6 +22,7 @@ import Control.Arrow (second)
 import Control.Monad
 import Control.Monad.RWS
 import Data.Kind (Type)
+import Control.Arrow (first)
 
 import Data.List as L
 import Data.Map as Map
@@ -41,9 +42,6 @@ data Handle s (addr :: Type) = Handle Name
 
 type FanIn dom a = Signal dom `Ap` First (Maybe a)
 
--- | type MkComponent dom dat addr = TExpQ (Signal dom (Maybe addr)) -> TExpQ (Signal dom (Maybe dat)
-type MkComponent = ExpQ -> ExpQ
-
 -- | type Addr dom addr = TExpQ (Signal dom (Maybe addr))
 type Addr = ExpQ
 type Addrs = [Addr]
@@ -51,8 +49,14 @@ type Addrs = [Addr]
 -- | type Dat dom dat = TExpQ (Signal dom (Maybe dat))
 type Dat = ExpQ
 
+-- | type Component dom dat a = TExpQ (Signal dom (Maybe dat), a)
+type Component = ExpQ
+
+-- | type MkComponent dom dat addr a = TExpQ (Signal dom (Maybe addr)) -> TExpQ (Signal dom (Maybe dat), a)
+type MkComponent = Addr -> Component
+
 newtype ComponentMap = ComponentMap
-    { components :: Map Name MkComponent }
+    { components :: Map Name (PatQ, MkComponent) }
     deriving newtype (Semigroup, Monoid)
 
 newtype ConnectionMap = ConnectionMap
@@ -72,28 +76,56 @@ newtype Addressing (s :: Type) (dat :: Type) (addr :: Type) (a :: Type) = Addres
     }
     deriving newtype (Functor, Applicative, Monad)
 
+class Backpane a where
+    backpane :: a -> ExpQ
+
+instance Backpane () where
+    backpane () = [|()|]
+
+instance (Backpane a1, Backpane a2) => Backpane (a1, a2) where
+    backpane (x1, x2) = [| ($(backpane x1), $(backpane x2)) |]
+
+instance (Backpane a1, Backpane a2, Backpane a3) => Backpane (a1, a2, a3) where
+    backpane (x1, x2, x3) = [| ($(backpane x1), $(backpane x2), $(backpane x3)) |]
+
+data Result a = Result ExpQ
+
+instance Backpane (Result a) where
+    backpane (Result e) = e
+
 compile
-    :: forall addr dat a b. ()
-    => (forall s. Addressing s dat addr ())
+    :: forall addr dat a b. (Backpane a)
+    => (forall s. Addressing s dat addr a)
     -> Addr
     -> Dat
-    -> Dat
+    -> Component
 compile addressing addr wr = do
-    ((), (decs, components -> comps, connections -> conns)) <- evalRWST (runAddressing addressing) (addr, wr) ()
+    (x, (decs, components -> comps, connections -> conns)) <- evalRWST (runAddressing addressing) (addr, wr) ()
 
     let (outs, compDecs) = L.unzip
-            [ (varE nm, [d| $(varP nm) = $rd |])
-            | (nm, mkComp) <- Map.toList comps
+            [ (varE nm, [d| ($(varP nm), $backP) = $rd |])
+            | (nm, (backP, mkComp)) <- Map.toList comps
             , let addrIn = case Map.lookup nm conns of
                       Just addrs -> [| muxA $(listE addrs) |]
                       Nothing -> [| pure Nothing |]
-            , let rd = [| let addr = $addrIn in mask (delay False $ isJust <$> addr) $(mkComp [| addr |]) |]
+            , let rd = [| let addr = $addrIn in first (mask (delay False $ isJust <$> addr)) $(mkComp [| addr |]) |]
             ]
 
     let out = [| fmap (fromMaybe (Just 0) . getFirst) . getAp $ mconcat $(listE outs) |]
 
     decs <- mconcat (decs:compDecs)
-    letE (pure <$> decs) out
+    letE (pure <$> decs) [| ($out, $(backpane x)) |]
+
+memoryMap
+    :: forall addr dat a. (Backpane a)
+    => Addr
+    -> Dat
+    -> (forall s. Addressing s dat addr a)
+    -> Component
+memoryMap addr wr addressing =
+    [| let addr' = $addr; wr' = $wr
+        in $(compile addressing [| addr' |] [| wr' |])
+    |]
 
 memoryMap_
     :: forall addr dat. ()
@@ -101,10 +133,7 @@ memoryMap_
     -> Dat
     -> (forall s. Addressing s dat addr ())
     -> Dat
-memoryMap_ addr wr addressing =
-    [| let addr' = $addr; wr' = $wr
-        in $(compile addressing [| addr' |] [| wr' |])
-    |]
+memoryMap_ addr wr addressing = [| fst $(memoryMap addr wr addressing) |]
 
 matchAddr
     :: forall addr' addr a s dat. ()
@@ -124,16 +153,23 @@ matchAddr match body = Addressing $ do
     restrict :: Addr -> Addr
     restrict addr = [| (>>= $match) <$> $addr |]
 
+readWrite
+    :: forall addr' a addr s dat. ()
+    => (Addr -> Dat -> Component)
+    -> Addressing s dat addr (Handle s addr', Result a)
+readWrite component = Addressing $ do
+    h@(Handle nm) <- Handle <$> (lift $ newName "rd")
+    (_, wr) <- ask
+    back <- lift $ newName "back"
+    let comp = \addr -> [| first strong $(component addr wr) |]
+    tell (mempty, ComponentMap $ Map.singleton nm (varP back, comp), mempty)
+    return (h, Result (varE back))
+
 readWrite_
     :: forall addr' addr s dat. ()
     => (Addr -> Dat -> Dat)
     -> Addressing s dat addr (Handle s addr')
-readWrite_ component = Addressing $ do
-    h@(Handle nm) <- Handle <$> (lift $ newName "rd")
-    (_, wr) <- ask
-    let comp = \addr -> [| strong $(component addr wr) |]
-    tell (mempty, ComponentMap $ Map.singleton nm comp, mempty)
-    return h
+readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
 
 romFromVec
     :: (1 <= n)
