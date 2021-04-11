@@ -98,14 +98,16 @@ compile addressing addr wr = do
     (x, (decs, components -> comps, connections -> conns)) <- evalRWST (runAddressing addressing) (addr, wr) ()
 
     (outs, compDecs) <- fmap L.unzip $ forM (Map.toList comps) $ \(nm, (pat, mkComp)) -> do
-        let addrIn = case Map.lookup nm conns of
+        let addrInE = case Map.lookup nm conns of
                 Just addrs -> [| muxA $(listE addrs) |]
                 Nothing -> [| pure Nothing |]
+        addrIn <- newName "addrIn"
         masked <- newName "masked"
         let def =
-                [d| ($pat, $(varP masked)) =
-                        let addr = $addrIn
-                        in ($(mkComp [|addr|]), mask (delay False $ isJust <$> addr) $(varE nm))
+                [d|
+                 $(varP addrIn) = $addrInE
+                 $pat = $(mkComp (varE addrIn))
+                 $(varP masked) = mask (delay False $ isJust <$> $(varE addrIn)) $(varE nm)
                 |]
         return (varE masked, def)
 
