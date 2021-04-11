@@ -66,7 +66,7 @@ newtype ConnectionMap = ConnectionMap
 instance Semigroup ConnectionMap where
     ConnectionMap m1 <> ConnectionMap m2 = ConnectionMap $ Map.unionWith (<>) m1 m2
 
-newtype Addressing (s :: Type) (dat :: Type) (addr :: Type) (a :: Type) = Addressing
+newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
           (Addr, Dat)
           (DecsQ, ComponentMap, ConnectionMap)
@@ -94,8 +94,8 @@ instance Backpane (Result a) where
     backpane (Result e) = e
 
 compile
-    :: forall addr dat a b. (Backpane a)
-    => (forall s. Addressing s dat addr a)
+    :: forall addr a b. (Backpane a)
+    => (forall s. Addressing s addr a)
     -> Addr
     -> Dat
     -> Component
@@ -117,10 +117,10 @@ compile addressing addr wr = do
     letE (pure <$> decs) [| ($out, $(backpane x)) |]
 
 memoryMap
-    :: forall addr dat a. (Backpane a)
+    :: forall addr a. (Backpane a)
     => Addr
     -> Dat
-    -> (forall s. Addressing s dat addr a)
+    -> (forall s. Addressing s addr a)
     -> Component
 memoryMap addr wr addressing =
     [| let addr' = $addr; wr' = $wr
@@ -131,15 +131,15 @@ memoryMap_
     :: forall addr dat. ()
     => Addr
     -> Dat
-    -> (forall s. Addressing s dat addr ())
+    -> (forall s. Addressing s addr ())
     -> Dat
 memoryMap_ addr wr addressing = [| fst $(memoryMap addr wr addressing) |]
 
 matchAddr
     :: forall addr' addr a s dat. ()
     => ExpQ {-(addr -> Maybe addr')-}
-    -> Addressing s dat addr' a
-    -> Addressing s dat addr a
+    -> Addressing s addr' a
+    -> Addressing s addr a
 matchAddr match body = Addressing $ do
     nm <- lift $ newName "addr"
     let addr' = varE nm
@@ -156,7 +156,7 @@ matchAddr match body = Addressing $ do
 readWrite
     :: forall addr' a addr s dat. ()
     => (Addr -> Dat -> Component)
-    -> Addressing s dat addr (Handle s addr', Result a)
+    -> Addressing s addr (Handle s addr', Result a)
 readWrite component = Addressing $ do
     h@(Handle nm) <- Handle <$> (lift $ newName "rd")
     (_, wr) <- ask
@@ -168,21 +168,21 @@ readWrite component = Addressing $ do
 readWrite_
     :: forall addr' addr s dat. ()
     => (Addr -> Dat -> Dat)
-    -> Addressing s dat addr (Handle s addr')
+    -> Addressing s addr (Handle s addr')
 readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
 
 romFromVec
     :: (1 <= n)
     => SNat n
     -> ExpQ {-(Vec n dat)-}
-    -> Addressing s dat addr (Handle s (Index n))
+    -> Addressing s addr (Handle s (Index n))
 romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
     [| fmap Just $ rom $xs (bitCoerce . fromJustX <$> $addr) |]
 
 ramFromFile
     :: SNat n
     -> ExpQ {-FilePath-}
-    -> Addressing s dat addr (Handle s (Index n))
+    -> Addressing s addr (Handle s (Index n))
 ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     [| fmap (Just . unpack) $
      blockRamFile size $fileName
@@ -191,15 +191,15 @@ ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
     |]
 
 from
-    :: forall addr' s dat addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
+    :: forall addr' s addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
     => addr
-    -> Addressing s dat addr' a
-    -> Addressing s dat addr a
+    -> Addressing s addr' a
+    -> Addressing s addr a
 from base = matchAddr [| from_ $(TH.lift (base :: addr)) $(TH.lift (maxBound :: addr')) |]
 
 connect
     :: Handle s addr
-    -> Addressing s dat addr ()
+    -> Addressing s addr ()
 connect h@(Handle nm) = Addressing $ do
     (addr, _) <- ask
     tell (mempty, mempty, ConnectionMap $ Map.singleton nm [addr])
