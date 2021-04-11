@@ -88,9 +88,9 @@ instance (Backpane a1, Backpane a2) => Backpane (a1, a2) where
 instance (Backpane a1, Backpane a2, Backpane a3) => Backpane (a1, a2, a3) where
     backpane (x1, x2, x3) = [| ($(backpane x1), $(backpane x2), $(backpane x3)) |]
 
-data Result a = Result ExpQ
+data Result = Result ExpQ
 
-instance Backpane (Result a) where
+instance Backpane Result where
     backpane (Result e) = e
 
 compile
@@ -154,9 +154,9 @@ matchAddr match body = Addressing $ do
     restrict addr = [| (>>= $match) <$> $addr |]
 
 readWrite
-    :: forall addr' a addr s dat. ()
+    :: forall addr' addr s dat. ()
     => (Addr -> Dat -> Component)
-    -> Addressing s addr (Handle s addr', Result a)
+    -> Addressing s addr (Handle s addr', Result)
 readWrite component = Addressing $ do
     h@(Handle nm) <- Handle <$> (lift $ newName "rd")
     (_, wr) <- ask
