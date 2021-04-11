@@ -103,12 +103,11 @@ compile addressing addr wr = do
     (x, (decs, components -> comps, connections -> conns)) <- evalRWST (runAddressing addressing) (addr, wr) ()
 
     let (outs, compDecs) = L.unzip
-            [ (varE nm, [d| ($(varP nm), $backP) = $rd |])
-            | (nm, (backP, mkComp)) <- Map.toList comps
+            [ (varE nm, [d| $pat = $(mkComp addrIn) |])
+            | (nm, (pat, mkComp)) <- Map.toList comps
             , let addrIn = case Map.lookup nm conns of
                       Just addrs -> [| muxA $(listE addrs) |]
                       Nothing -> [| pure Nothing |]
-            , let rd = [| let addr = $addrIn in first (mask (delay False $ isJust <$> addr)) $(mkComp [| addr |]) |]
             ]
 
     let out = [| fmap (fromMaybe (Just 0) . getFirst) . getAp $ mconcat $(listE outs) |]
@@ -161,8 +160,11 @@ readWrite component = Addressing $ do
     h@(Handle nm) <- Handle <$> (lift $ newName "rd")
     (_, wr) <- ask
     back <- lift $ newName "back"
-    let comp = \addr -> [| first strong $(component addr wr) |]
-    tell (mempty, ComponentMap $ Map.singleton nm (varP back, comp), mempty)
+    let comp = \addr ->
+          [| let addr' = $addr
+             in first (mask (delay False $ isJust <$> addr') . strong) $(component [|addr'|] wr)
+          |]
+    tell (mempty, ComponentMap $ Map.singleton nm ([p|($(varP nm), $(varP back))|], comp), mempty)
     return (h, Result (varE back))
 
 readWrite_
