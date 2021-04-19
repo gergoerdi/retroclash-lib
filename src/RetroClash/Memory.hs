@@ -5,15 +5,12 @@ module RetroClash.Memory
     ( RAM, ROM, Port, Port_
     , packRam
 
-    , memoryMap, memoryMap_
+    , memoryMap_
 
-    , conduit, readWrite, readWrite_
+    , readWrite_
     , romFromVec, romFromFile
     , ram0, ramFromFile
-    , port, port_
     , connect
-
-    , override
 
     , from
     , matchLeft, matchRight
@@ -29,7 +26,6 @@ import Control.Monad
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.Kind (Type)
-import Control.Arrow (first)
 
 import Data.List as L
 import Data.Map.Monoidal as Map
@@ -62,26 +58,8 @@ newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: ReaderT (Addr, Dat) (WriterT (DecsQ, [Component], MonoidalMap Name [Addr]) Q) a }
     deriving newtype (Functor, Applicative, Monad)
 
-class Backpane a where
-    backpane :: a -> ExpQ
-
-instance Backpane () where
-    backpane () = [|()|]
-
-instance (Backpane a1, Backpane a2) => Backpane (a1, a2) where
-    backpane (x1, x2) = [| ($(backpane x1), $(backpane x2)) |]
-
-instance (Backpane a1, Backpane a2, Backpane a3) => Backpane (a1, a2, a3) where
-    backpane (x1, x2, x3) = [| ($(backpane x1), $(backpane x2), $(backpane x3)) |]
-
-data Result = Result ExpQ
-
-instance Backpane Result where
-    backpane (Result e) = e
-
 compile
-    :: forall addr a b. (Backpane a)
-    => (forall s. Addressing s addr a)
+    :: (forall s. Addressing s addr ())
     -> Addr
     -> Dat
     -> Component
@@ -95,26 +73,17 @@ compile addressing addr wr = do
     decs <- mconcat (decs:compDecs)
 
     let rd = [| muxA $(listE rds) .<| Just 0 |]
-    letE (pure <$> decs) [| ($rd, $(backpane x)) |]
-
-memoryMap
-    :: forall addr a. (Backpane a)
-    => Addr
-    -> Dat
-    -> (forall s. Addressing s addr a)
-    -> Component
-memoryMap addr wr addressing =
-    [| let addr' = $addr; wr' = $wr
-        in $(compile addressing [| addr' |] [| wr' |])
-    |]
+    letE (pure <$> decs) rd
 
 memoryMap_
-    :: forall addr dat. ()
-    => Addr
+    :: Addr
     -> Dat
     -> (forall s. Addressing s addr ())
-    -> Dat
-memoryMap_ addr wr addressing = [| fst $(memoryMap addr wr addressing) |]
+    -> Component
+memoryMap_ addr wr addressing =
+    [| let addr' = $addr; wr' = $wr
+       in $(compile addressing [| addr' |] [| wr' |])
+    |]
 
 connect
     :: Handle s addr
@@ -149,32 +118,17 @@ matchAddr match body = Addressing $ do
           (tell (dec, mempty, mempty) >> runAddressing body)
           (addr', wr)
 
-readWrite
-    :: forall addr' addr s dat. ()
-    => (Addr -> Dat -> Component)
-    -> Addressing s addr (Handle s addr', Result)
-readWrite component = Addressing $ do
-    rd <- lift . lift $ newName "rd"
-    addr <- lift . lift $ newName "compAddr"
-    result <- lift . lift $ newName "result"
-    (_, wr) <- ask
-    let decs = [d| ($(varP rd), $(varP result)) = $(component (varE addr) wr) |]
-    tell (decs, mempty, Map.singleton addr mempty)
-    return (Handle rd addr, Result (varE result))
-
 readWrite_
     :: forall addr' addr s dat. ()
-    => (Addr -> Dat -> Dat)
+    => (Addr -> Dat -> Component)
     -> Addressing s addr (Handle s addr')
-readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
-
-conduit
-    :: forall addr' s addr. ()
-    => ExpQ
-    -> Addressing s addr (Handle s addr', Result, Result)
-conduit rdExt = do
-    (h, Result x) <- readWrite $ \addr wr -> [| ($rdExt, ($addr, $wr)) |]
-    return (h, Result [| fst $x |], Result [| snd $x |])
+readWrite_ component = Addressing $ do
+    rd <- lift . lift $ newName "rd"
+    addr <- lift . lift $ newName "compAddr"
+    (_, wr) <- ask
+    let decs = [d| $(varP rd) = $(component (varE addr) wr) |]
+    tell (decs, mempty, Map.singleton addr mempty)
+    return $ Handle rd addr
 
 romFromVec
     :: (1 <= n)
@@ -209,21 +163,6 @@ ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
        (fromJustX <$> $addr)
        (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr))
     |]
-
-port
-    :: forall addr' a s addr. ()
-    => ExpQ
-    -> Addressing s addr (Handle s addr', Result)
-port mkPort = readWrite $ \addr wr ->
-  [| let (read, x) = $mkPort $ portFromAddr $addr $wr
-     in (delay Nothing read, x) |]
-
-port_
-    :: forall addr' s addr. ()
-    => ExpQ
-    -> Addressing s addr (Handle s addr')
-port_ mkPort = readWrite_ $ \addr wr ->
-  [| let read = $mkPort $ portFromAddr $addr $wr in delay Nothing read |]
 
 from
     :: forall addr' s addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Typeable addr', Lift addr)
