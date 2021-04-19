@@ -45,8 +45,10 @@ dependencies:
   - transformers
   - barbies ^>= 2.0.1
   - lens
-  - dependent-map
-  - dependent-sum
+  - containers
+  - template-haskell
+  - lift-type
+  - monoidal-containers
 
 source-dirs:
   - src
