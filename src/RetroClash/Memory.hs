@@ -51,7 +51,7 @@ type Addr = ExpQ
 -- | type Dat dom dat = TExpQ (Signal dom (Maybe dat))
 type Dat = ExpQ
 
--- | type Component dom dat a = TExpQ (Signal dom (Maybe dat), a)
+-- | type Component dom dat a = TExpQ (Signal dom dat)
 type Component = ExpQ
 
 newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
@@ -65,14 +65,14 @@ compile
     -> Component
 compile addressing addr wr = do
     (x, (decs, rds, conns)) <-
-        runWriterT $ runReaderT (runAddressing addressing) (addr, wr)
+        runWriterT $ runReaderT (runAddressing addressing) ([| Just <$> $addr |], wr)
 
     let compDecs = [ [d| $(varP nm) = muxA $(listE addrs) |]
                    | (nm, addrs) <- Map.toList conns
                    ]
     decs <- mconcat (decs:compDecs)
 
-    let rd = [| muxA $(listE rds) .<| Just 0 |]
+    let rd = [| muxA $(listE rds) .<| 0 |]
     letE (pure <$> decs) rd
 
 memoryMap_
@@ -136,7 +136,7 @@ romFromVec
     -> ExpQ {-(Vec n dat)-}
     -> Addressing s addr (Handle s (Index n))
 romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
-    [| fmap Just $ rom $xs (bitCoerce . fromJustX <$> $addr) |]
+    [| rom $xs (bitCoerce . fromJustX <$> $addr) |]
 
 romFromFile
     :: (1 <= n)
@@ -144,21 +144,21 @@ romFromFile
     -> ExpQ
     -> Addressing s addr (Handle s (Index n))
 romFromFile size@SNat fileName = readWrite_ $ \addr _wr ->
-    [| fmap (Just . unpack) $ romFilePow2 $fileName (maybe 0 bitCoerce <$> $addr) |]
+    [| fmap unpack $ romFilePow2 $fileName (maybe 0 bitCoerce <$> $addr) |]
 
 ram0
     :: (1 <= n)
     => SNat n
     -> Addressing s addr (Handle s (Index n))
 ram0 size@SNat = readWrite_ $ \addr wr ->
-    [| fmap Just $ blockRam1 NoClearOnReset $(TH.lift size) 0 (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
+    [| blockRam1 NoClearOnReset $(TH.lift size) 0 (fromMaybe 0 <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
 
 ramFromFile
     :: SNat n
     -> ExpQ {-FilePath-}
     -> Addressing s addr (Handle s (Index n))
 ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
-    [| fmap (Just . unpack) $
+    [| fmap unpack $
      blockRamFile size $fileName
        (fromJustX <$> $addr)
        (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr))
