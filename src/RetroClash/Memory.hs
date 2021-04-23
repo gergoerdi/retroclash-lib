@@ -2,7 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 module RetroClash.Memory
-    ( RAM, ROM, Port, Port_
+    ( RAM, ROM
     , packRam
 
     , memoryMap_
@@ -13,8 +13,6 @@ module RetroClash.Memory
     , connect
 
     , from
-    , matchLeft, matchRight
-    , tag
     ) where
 
 import Clash.Prelude hiding (Exp, lift)
@@ -37,8 +35,6 @@ import qualified Language.Haskell.TH.Syntax as TH
 
 type RAM dom addr dat = Signal dom addr -> Signal dom (Maybe (addr, dat)) -> Signal dom dat
 type ROM dom addr dat = Signal dom addr ->                                   Signal dom dat
-type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
-type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
 
 packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
 packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
@@ -92,17 +88,6 @@ connect (Handle rd compAddr) = Addressing $ do
     (addr, _) <- ask
     let masked = [| enable (delay False $ isJust <$> $addr) $(varE rd) |]
     tell (mempty, [masked], Map.singleton compAddr [addr])
-
-override
-    :: ExpQ
-    -> Addressing s addr ()
-override sig = Addressing $ do
-    rd <- lift . lift $ newName "rd"
-    let decs = [d| $(varP rd) = weak $sig |]
-    tell (decs, [varE rd], mempty)
-
-weak :: (Functor f) => f (Maybe a) -> f (Maybe (Maybe a))
-weak = fmap (maybe Nothing (Just . Just))
 
 matchAddr
     :: forall addr' addr a s dat. ()
@@ -170,23 +155,6 @@ from
     -> Addressing s addr' a
     -> Addressing s addr a
 from base = matchAddr [| from_ @($(liftTypeQ @addr')) $(TH.lift base) |]
-
-tag
-    :: (Lift addr')
-    => addr'
-    -> Addressing s (addr', addr) a
-    -> Addressing s addr a
-tag t = matchAddr [| \addr -> Just ($(TH.lift t), addr) |]
-
-matchLeft
-    :: Addressing s addr1 a
-    -> Addressing s (Either addr1 addr2) a
-matchLeft = matchAddr [| either Just (const Nothing) |]
-
-matchRight
-    :: Addressing s addr2 a
-    -> Addressing s (Either addr1 addr2) a
-matchRight = matchAddr [| either (const Nothing) Just |]
 
 from_ :: forall addr' addr. (Integral addr, Ord addr, Integral addr', Bounded addr')
     => addr -> addr -> Maybe addr'
