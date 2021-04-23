@@ -34,6 +34,8 @@ import Data.List as L
 import Data.Map as Map
 
 import Language.Haskell.TH hiding (Type)
+import LiftType
+import Type.Reflection (Typeable)
 import qualified Language.Haskell.TH.Syntax as TH
 
 type RAM dom addr dat = Signal dom addr -> Signal dom (Maybe (addr, dat)) -> Signal dom dat
@@ -268,11 +270,11 @@ port_ mkPort = readWrite_ $ \addr wr ->
   [| let read = $mkPort $ portFromAddr $addr $wr in delay Nothing read |]
 
 from
-    :: forall addr' s addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Lift addr, Lift addr')
+    :: forall addr' s addr a. (Integral addr, Ord addr, Integral addr', Bounded addr', Typeable addr', Lift addr)
     => addr
     -> Addressing s addr' a
     -> Addressing s addr a
-from base = matchAddr [| from_ $(TH.lift (base :: addr)) $(TH.lift (maxBound :: addr')) |]
+from base = matchAddr [| from_ @($(liftTypeQ @addr')) $(TH.lift base) |]
 
 tag
     :: (Lift addr')
@@ -292,11 +294,11 @@ matchRight
 matchRight = matchAddr [| either (const Nothing) Just |]
 
 from_ :: forall addr' addr. (Integral addr, Ord addr, Integral addr', Bounded addr')
-    => addr -> addr' -> addr -> Maybe addr'
-from_ base lim addr = do
+    => addr -> addr -> Maybe addr'
+from_ base addr = do
     guard $ addr >= base
     let offset = addr - base
-    guard $ offset <= fromIntegral lim
+    guard $ offset <= fromIntegral (maxBound :: addr')
     return (fromIntegral offset)
 
 strong :: (Functor f) => f a -> f `Ap` First a

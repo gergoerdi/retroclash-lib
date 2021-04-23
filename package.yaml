@@ -17,6 +17,7 @@ dependencies:
   - lens
   - containers
   - template-haskell
+  - lift-type
 
 source-dirs:
   - src
