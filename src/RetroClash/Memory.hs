@@ -58,13 +58,6 @@ type Dat = ExpQ
 -- | type Component dom dat a = TExpQ (Signal dom (Maybe dat), a)
 type Component = ExpQ
 
--- | type MkComponent dom dat addr a = TExpQ (Signal dom (Maybe addr)) -> TDecsQ({ nm :: Signal dom (Maybe dat) })
-type MkComponent = Addr -> DecsQ
-
-newtype ComponentMap = ComponentMap
-    { components :: Map Name MkComponent }
-    deriving newtype (Semigroup, Monoid)
-
 newtype ConnectionMap = ConnectionMap
     { connections :: Map Name Addrs }
     deriving newtype (Monoid)
@@ -75,7 +68,7 @@ instance Semigroup ConnectionMap where
 newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
           (Addr, Dat)
-          (DecsQ, ComponentMap, ConnectionMap)
+          (DecsQ, [Component], ConnectionMap)
           ()
           Q
           a
@@ -106,25 +99,16 @@ compile
     -> Dat
     -> Component
 compile addressing addr wr = do
-    (x, (decs, components -> comps, connections -> conns)) <- evalRWST (runAddressing addressing) (addr, wr) ()
+    (x, (decs, rds, connections -> conns)) <-
+        evalRWST (runAddressing addressing) (addr, wr) ()
 
-    (outs, compDecs) <- fmap L.unzip $ forM (Map.toList comps) $ \(nm, mkComp) -> do
-        let addrInE = case Map.lookup nm conns of
-                Just addrs -> [| muxA $(listE addrs) |]
-                Nothing -> [| pure Nothing |]
-        addrIn <- newName "addrIn"
-        masked <- newName "masked"
-        let comp = mconcat
-                [ [d| $(varP addrIn) = $addrInE |]
-                , mkComp (varE addrIn)
-                , [d| $(varP masked) = guardA (delay False $ isJust <$> $(varE addrIn)) $(varE nm) |]
-                ]
-        return (varE masked, comp)
-
-    let out = [| muxA $(listE outs) .<| Just 0 |]
-
+    let compDecs = [ [d| $(varP nm) = muxA $(listE addrs) |]
+                   | (nm, addrs) <- Map.toList conns
+                   ]
     decs <- mconcat (decs:compDecs)
-    letE (pure <$> decs) [| ($out, $(backpane x)) |]
+
+    let rd = [| muxA $(listE rds) .<| Just 0 |]
+    letE (pure <$> decs) [| ($rd, $(backpane x)) |]
 
 memoryMap
     :: forall addr a. (Backpane a)
@@ -156,9 +140,12 @@ override
     :: ExpQ
     -> Addressing s addr ()
 override sig = Addressing $ do
-    nm <- lift $ newName "override"
-    let comp = \_ -> [d| $(varP nm) = weak $sig |]
-    tell (mempty, ComponentMap $ Map.singleton nm comp, mempty)
+    rd <- lift $ newName "rd"
+    let decs = [d| $(varP rd) = weak $sig |]
+    tell (decs, [varE rd], mempty)
+
+weak :: (Functor f) => f (Maybe a) -> f (Maybe (Maybe a))
+weak = fmap (maybe Nothing (Just . Just))
 
 matchAddr
     :: forall addr' addr a s dat. ()
@@ -183,15 +170,15 @@ readWrite
     => (Addr -> Dat -> Component)
     -> Addressing s addr (Handle s addr', Result)
 readWrite component = Addressing $ do
-    h@(Handle nm) <- Handle <$> (lift $ newName "rd")
-    (_, wr) <- ask
+    rd <- lift $ newName "rd"
+    masked <- lift $ newName "masked"
     result <- lift $ newName "result"
-    let comp = \addr ->
-          [d|
-           (comp, $(varP result)) = $(component addr wr)
-           $(varP nm) = strong comp
-          |]
-    tell (mempty, ComponentMap $ Map.singleton nm comp, mempty)
+    h@(Handle nm) <- Handle <$> (lift $ newName "compAddr")
+    (_, wr) <- ask
+    let decs = [d| ($(varP rd), $(varP result)) = $(component (varE nm) wr)
+                   $(varP masked) = enable (delay False $ isJust <$> $(varE nm)) $(varE rd)
+               |]
+    tell (decs, [varE masked], ConnectionMap $ Map.singleton nm mempty)
     return (h, Result (varE result))
 
 readWrite_
@@ -288,9 +275,3 @@ from_ base addr = do
     let offset = addr - base
     guard $ offset <= fromIntegral (maxBound :: addr')
     return (fromIntegral offset)
-
-strong :: (Functor f) => f (Maybe a) -> f (Maybe (Maybe a))
-strong = fmap Just
-
-weak :: (Functor f) => f (Maybe a) -> f (Maybe (Maybe a))
-weak = fmap (maybe Nothing (Just . Just))
