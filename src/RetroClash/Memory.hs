@@ -178,24 +178,6 @@ matchAddr match body = Addressing $ do
     restrict :: Addr -> Addr
     restrict addr = [| (>>= $match) <$> $addr |]
 
-conduit
-    :: forall addr' s addr. ()
-    => ExpQ
-    -> Addressing s addr (Handle s addr', Result, Result)
-conduit rdExt = Addressing $ do
-    h@(Handle nm) <- Handle <$> (lift $ newName "rd")
-    (_, wr) <- ask
-    wrExt <- lift $ newName "wrExt"
-    addrExt <- lift $ newName "addrExt"
-    let comp = \addr ->
-          [d|
-           $(varP nm) = strong $rdExt
-           $(varP addrExt) = $addr
-           $(varP wrExt) = $wr
-          |]
-    tell (mempty, ComponentMap $ Map.singleton nm comp, mempty)
-    return (h, Result (varE addrExt), Result (varE wrExt))
-
 readWrite
     :: forall addr' addr s dat. ()
     => (Addr -> Dat -> Component)
@@ -217,6 +199,14 @@ readWrite_
     => (Addr -> Dat -> Dat)
     -> Addressing s addr (Handle s addr')
 readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
+
+conduit
+    :: forall addr' s addr. ()
+    => ExpQ
+    -> Addressing s addr (Handle s addr', Result, Result)
+conduit rdExt = do
+    (h, Result x) <- readWrite $ \addr wr -> [| ($rdExt, ($addr, $wr)) |]
+    return (h, Result [| fst $x |], Result [| snd $x |])
 
 romFromVec
     :: (1 <= n)
