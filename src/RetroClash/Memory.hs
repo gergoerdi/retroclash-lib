@@ -31,7 +31,7 @@ import Data.Kind (Type)
 import Control.Arrow (first)
 
 import Data.List as L
-import Data.Map as Map
+import Data.Map.Monoidal as Map
 
 import Language.Haskell.TH hiding (Type)
 import LiftType
@@ -50,7 +50,6 @@ data Handle s (addr :: Type) = Handle Name
 
 -- | type Addr dom addr = TExpQ (Signal dom (Maybe addr))
 type Addr = ExpQ
-type Addrs = [Addr]
 
 -- | type Dat dom dat = TExpQ (Signal dom (Maybe dat))
 type Dat = ExpQ
@@ -58,17 +57,10 @@ type Dat = ExpQ
 -- | type Component dom dat a = TExpQ (Signal dom (Maybe dat), a)
 type Component = ExpQ
 
-newtype ConnectionMap = ConnectionMap
-    { connections :: Map Name Addrs }
-    deriving newtype (Monoid)
-
-instance Semigroup ConnectionMap where
-    ConnectionMap m1 <> ConnectionMap m2 = ConnectionMap $ Map.unionWith (<>) m1 m2
-
 newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
     { runAddressing :: RWST
           (Addr, Dat)
-          (DecsQ, [Component], ConnectionMap)
+          (DecsQ, [Component], MonoidalMap Name [Addr])
           ()
           Q
           a
@@ -99,7 +91,7 @@ compile
     -> Dat
     -> Component
 compile addressing addr wr = do
-    (x, (decs, rds, connections -> conns)) <-
+    (x, (decs, rds, conns)) <-
         evalRWST (runAddressing addressing) (addr, wr) ()
 
     let compDecs = [ [d| $(varP nm) = muxA $(listE addrs) |]
@@ -134,7 +126,7 @@ connect
     -> Addressing s addr ()
 connect h@(Handle nm) = Addressing $ do
     (addr, _) <- ask
-    tell (mempty, mempty, ConnectionMap $ Map.singleton nm [addr])
+    tell (mempty, mempty, Map.singleton nm [addr])
 
 override
     :: ExpQ
@@ -178,7 +170,7 @@ readWrite component = Addressing $ do
     let decs = [d| ($(varP rd), $(varP result)) = $(component (varE nm) wr)
                    $(varP masked) = enable (delay False $ isJust <$> $(varE nm)) $(varE rd)
                |]
-    tell (decs, [varE masked], ConnectionMap $ Map.singleton nm mempty)
+    tell (decs, [varE masked], Map.singleton nm mempty)
     return (h, Result (varE result))
 
 readWrite_

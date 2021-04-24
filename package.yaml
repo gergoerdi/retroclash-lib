@@ -18,6 +18,7 @@ dependencies:
   - containers
   - template-haskell
   - lift-type
+  - monoidal-containers
 
 source-dirs:
   - src
