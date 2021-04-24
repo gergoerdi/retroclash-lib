@@ -48,8 +48,6 @@ packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
 
 data Handle s (addr :: Type) = Handle Name
 
-type FanIn dom a = Signal dom `Ap` First (Maybe a)
-
 -- | type Addr dom addr = TExpQ (Signal dom (Maybe addr))
 type Addr = ExpQ
 type Addrs = [Addr]
@@ -119,11 +117,11 @@ compile addressing addr wr = do
         let comp = mconcat
                 [ [d| $(varP addrIn) = $addrInE |]
                 , mkComp (varE addrIn)
-                , [d| $(varP masked) = mask (delay False $ isJust <$> $(varE addrIn)) $(varE nm) |]
+                , [d| $(varP masked) = guardA (delay False $ isJust <$> $(varE addrIn)) $(varE nm) |]
                 ]
         return (varE masked, comp)
 
-    let out = [| fmap (fromMaybe (Just 0) . getFirst) . getAp $ mconcat $(listE outs) |]
+    let out = [| muxA $(listE outs) .<| Just 0 |]
 
     decs <- mconcat (decs:compDecs)
     letE (pure <$> decs) [| ($out, $(backpane x)) |]
@@ -301,11 +299,8 @@ from_ base addr = do
     guard $ offset <= fromIntegral (maxBound :: addr')
     return (fromIntegral offset)
 
-strong :: (Functor f) => f a -> f `Ap` First a
-strong = Ap . fmap pure
+strong :: (Functor f) => f (Maybe a) -> f (Maybe (Maybe a))
+strong = fmap Just
 
-weak :: (Functor f) => f (Maybe a) -> f `Ap` First (Maybe a)
-weak = Ap . fmap (maybe mempty (pure . Just))
-
-mask :: (Applicative f) => f Bool -> f `Ap` First a -> f `Ap` First a
-mask p x = Ap $ mux p (getAp x) (pure mempty)
+weak :: (Functor f) => f (Maybe a) -> f (Maybe (Maybe a))
+weak = fmap (maybe Nothing (Just . Just))
