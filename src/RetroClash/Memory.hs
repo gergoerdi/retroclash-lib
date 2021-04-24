@@ -26,7 +26,8 @@ import RetroClash.Port
 import Data.Maybe
 import Control.Arrow (second)
 import Control.Monad
-import Control.Monad.RWS
+import Control.Monad.Reader
+import Control.Monad.Writer
 import Data.Kind (Type)
 import Control.Arrow (first)
 
@@ -58,13 +59,7 @@ type Dat = ExpQ
 type Component = ExpQ
 
 newtype Addressing (s :: Type) (addr :: Type) (a :: Type) = Addressing
-    { runAddressing :: RWST
-          (Addr, Dat)
-          (DecsQ, [Component], MonoidalMap Name [Addr])
-          ()
-          Q
-          a
-    }
+    { runAddressing :: ReaderT (Addr, Dat) (WriterT (DecsQ, [Component], MonoidalMap Name [Addr]) Q) a }
     deriving newtype (Functor, Applicative, Monad)
 
 class Backpane a where
@@ -92,7 +87,7 @@ compile
     -> Component
 compile addressing addr wr = do
     (x, (decs, rds, conns)) <-
-        evalRWST (runAddressing addressing) (addr, wr) ()
+        runWriterT $ runReaderT (runAddressing addressing) (addr, wr)
 
     let compDecs = [ [d| $(varP nm) = muxA $(listE addrs) |]
                    | (nm, addrs) <- Map.toList conns
@@ -132,7 +127,7 @@ override
     :: ExpQ
     -> Addressing s addr ()
 override sig = Addressing $ do
-    rd <- lift $ newName "rd"
+    rd <- lift . lift $ newName "rd"
     let decs = [d| $(varP rd) = weak $sig |]
     tell (decs, [varE rd], mempty)
 
@@ -145,27 +140,23 @@ matchAddr
     -> Addressing s addr' a
     -> Addressing s addr a
 matchAddr match body = Addressing $ do
-    nm <- lift $ newName "addr"
+    nm <- lift . lift $ newName "addr"
     let addr' = varE nm
-    RWST $ \(addr, wr) s -> do
-        let dec = [d| $(varP nm) = $(restrict addr) |]
-        runRWST
+    ReaderT $ \(addr, wr) -> do
+        let dec = [d| $(varP nm) = ($match =<<) <$> $addr |]
+        runReaderT
           (tell (dec, mempty, mempty) >> runAddressing body)
           (addr', wr)
-          s
-  where
-    restrict :: Addr -> Addr
-    restrict addr = [| (>>= $match) <$> $addr |]
 
 readWrite
     :: forall addr' addr s dat. ()
     => (Addr -> Dat -> Component)
     -> Addressing s addr (Handle s addr', Result)
 readWrite component = Addressing $ do
-    rd <- lift $ newName "rd"
-    masked <- lift $ newName "masked"
-    result <- lift $ newName "result"
-    h@(Handle nm) <- Handle <$> (lift $ newName "compAddr")
+    rd <- lift . lift $ newName "rd"
+    masked <- lift . lift $ newName "masked"
+    result <- lift . lift $ newName "result"
+    h@(Handle nm) <- Handle <$> (lift . lift $ newName "compAddr")
     (_, wr) <- ask
     let decs = [d| ($(varP rd), $(varP result)) = $(component (varE nm) wr)
                    $(varP masked) = enable (delay False $ isJust <$> $(varE nm)) $(varE rd)
