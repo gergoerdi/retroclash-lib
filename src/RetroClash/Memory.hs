@@ -47,7 +47,7 @@ type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal do
 packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
 packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
 
-data Handle s (addr :: Type) = Handle Name
+data Handle s (addr :: Type) = Handle Name Name
 
 -- | type Addr dom addr = TExpQ (Signal dom (Maybe addr))
 type Addr = ExpQ
@@ -119,9 +119,10 @@ memoryMap_ addr wr addressing = [| fst $(memoryMap addr wr addressing) |]
 connect
     :: Handle s addr
     -> Addressing s addr ()
-connect h@(Handle nm) = Addressing $ do
+connect (Handle rd compAddr) = Addressing $ do
     (addr, _) <- ask
-    tell (mempty, mempty, Map.singleton nm [addr])
+    let masked = [| enable (delay False $ isJust <$> $addr) $(varE rd) |]
+    tell (mempty, [masked], Map.singleton compAddr [addr])
 
 override
     :: ExpQ
@@ -154,15 +155,12 @@ readWrite
     -> Addressing s addr (Handle s addr', Result)
 readWrite component = Addressing $ do
     rd <- lift . lift $ newName "rd"
-    masked <- lift . lift $ newName "masked"
+    addr <- lift . lift $ newName "compAddr"
     result <- lift . lift $ newName "result"
-    h@(Handle nm) <- Handle <$> (lift . lift $ newName "compAddr")
     (_, wr) <- ask
-    let decs = [d| ($(varP rd), $(varP result)) = $(component (varE nm) wr)
-                   $(varP masked) = enable (delay False $ isJust <$> $(varE nm)) $(varE rd)
-               |]
-    tell (decs, [varE masked], Map.singleton nm mempty)
-    return (h, Result (varE result))
+    let decs = [d| ($(varP rd), $(varP result)) = $(component (varE addr) wr) |]
+    tell (decs, mempty, Map.singleton addr mempty)
+    return (Handle rd addr, Result (varE result))
 
 readWrite_
     :: forall addr' addr s dat. ()
