@@ -136,8 +136,7 @@ weak :: (Functor f) => f (Maybe a) -> f (Maybe (Maybe a))
 weak = fmap (maybe Nothing (Just . Just))
 
 matchAddr
-    :: forall addr' addr a s dat. ()
-    => ExpQ {-(addr -> Maybe addr')-}
+    :: ExpQ {-(addr -> Maybe addr')-}
     -> Addressing s addr' a
     -> Addressing s addr a
 matchAddr match body = Addressing $ do
@@ -150,8 +149,7 @@ matchAddr match body = Addressing $ do
           (addr', wr)
 
 readWrite
-    :: forall addr' addr s dat. ()
-    => (Addr -> Dat -> Component)
+    :: (Addr -> Dat -> Component)
     -> Addressing s addr (Handle s addr', Result)
 readWrite component = Addressing $ do
     rd <- lift . lift $ newName "rd"
@@ -163,8 +161,7 @@ readWrite component = Addressing $ do
     return (Handle rd addr, Result (varE result))
 
 readWrite_
-    :: forall addr' addr s dat. ()
-    => (Addr -> Dat -> Dat)
+    :: (Addr -> Dat -> Dat)
     -> Addressing s addr (Handle s addr')
 readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
 
