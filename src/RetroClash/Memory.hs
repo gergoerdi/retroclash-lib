@@ -1,5 +1,4 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE RankNTypes #-}
 module RetroClash.Memory
     ( RAM, ROM, Port, Port_
