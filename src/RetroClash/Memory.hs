@@ -29,7 +29,6 @@ import Data.Map.Monoidal as Map
 import Language.Haskell.TH hiding (Type)
 import LiftType
 import Type.Reflection (Typeable)
-import qualified Language.Haskell.TH.Syntax as TH
 
 type RAM dom addr dat = Signal dom addr -> Signal dom (Maybe (addr, dat)) -> Signal dom dat
 type ROM dom addr dat = Signal dom addr ->                                   Signal dom dat
@@ -132,7 +131,7 @@ ram0
     => SNat n
     -> Addressing addr (Handle (Index n))
 ram0 size@SNat = readWrite_ $ \addr wr ->
-    [| blockRam1 NoClearOnReset $(TH.lift size) 0 (fromJustX <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
+    [| blockRam1 NoClearOnReset size 0 (fromJustX <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
 
 ramFromFile
     :: SNat n
@@ -151,7 +150,7 @@ from
     => addr
     -> Addressing addr' a
     -> Addressing addr a
-from base = matchAddr [| from' @($(liftTypeQ @addr')) $(TH.lift base) |]
+from base = matchAddr [| from' @($(liftTypeQ @addr')) base |]
 
 from'
     :: forall addr' addr. (Integral addr, Ord addr, Integral addr', Bounded addr')
