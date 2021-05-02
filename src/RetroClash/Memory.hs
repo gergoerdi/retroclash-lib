@@ -12,6 +12,8 @@ module RetroClash.Memory
     , connect
 
     , from
+    , matchLeft, matchRight
+    , tag
     ) where
 
 import Clash.Prelude hiding (Exp, lift)
@@ -207,6 +209,23 @@ from
     -> Addressing addr' a
     -> Addressing addr a
 from base = matchAddr [| from' @($(liftTypeQ @addr')) base |]
+
+tag
+    :: (Lift addr')
+    => addr'
+    -> Addressing (addr', addr) a
+    -> Addressing addr a
+tag t = matchAddr [| \addr -> Just (t, addr) |]
+
+matchLeft
+    :: Addressing addr1 a
+    -> Addressing (Either addr1 addr2) a
+matchLeft = matchAddr [| either Just (const Nothing) |]
+
+matchRight
+    :: Addressing addr2 a
+    -> Addressing (Either addr1 addr2) a
+matchRight = matchAddr [| either (const Nothing) Just |]
 
 from'
     :: forall addr' addr. (Integral addr, Ord addr, Integral addr', Bounded addr')
