@@ -36,7 +36,7 @@ type ROM dom addr dat = Signal dom addr ->                                   Sig
 packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
 packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
 
-data Handle (addr :: Type) = Handle Name Name
+data Handle addr = Handle Name Name
 
 -- | type Addr dom addr = TExpQ (Signal dom (Maybe addr))
 type Addr = ExpQ
@@ -47,7 +47,7 @@ type Dat = ExpQ
 -- | type Component dom dat a = TExpQ (Signal dom (Maybe dat))
 type Component = ExpQ
 
-newtype Addressing (addr :: Type) (a :: Type) = Addressing
+newtype Addressing addr a = Addressing
     { runAddressing :: ReaderT (Addr, Dat) (WriterT (DecsQ, MonoidalMap Name [Addr], [Component]) Q) a }
     deriving newtype (Functor, Applicative, Monad)
 
