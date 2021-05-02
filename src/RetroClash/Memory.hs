@@ -1,13 +1,14 @@
 {-# LANGUAGE DerivingStrategies, GeneralizedNewtypeDeriving #-}
 module RetroClash.Memory
-    ( RAM, ROM
+    ( RAM, ROM, Port, Port_
     , packRam
 
     , memoryMap, memoryMap_
 
-    , readWrite, readWrite_
+    , conduit, readWrite, readWrite_
     , romFromVec, romFromFile
     , ram0, ramFromFile
+    , port, port_
     , connect
 
     , from
@@ -32,6 +33,8 @@ import Type.Reflection (Typeable)
 
 type RAM dom addr dat = Signal dom addr -> Signal dom (Maybe (addr, dat)) -> Signal dom dat
 type ROM dom addr dat = Signal dom addr ->                                   Signal dom dat
+type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
+type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
 
 packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
 packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
@@ -141,6 +144,14 @@ readWrite_
     -> Addressing addr (Handle addr')
 readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
 
+conduit
+    :: forall addr' addr. ()
+    => ExpQ
+    -> Addressing addr (Handle addr', Result, Result)
+conduit rdExt = do
+    (h, Result x) <- readWrite $ \addr wr -> [| ($rdExt, ($addr, $wr)) |]
+    return (h, Result [| fst $x |], Result [| snd $x |])
+
 romFromVec
     :: (1 <= n)
     => SNat n
@@ -173,6 +184,21 @@ ramFromFile size fileName = readWrite_ $ \addr wr ->
            (fromJustX <$> $addr)
            (liftA2 (,) <$> $addr <*> $wr)
     |]
+
+port
+    :: forall addr' a addr. ()
+    => ExpQ
+    -> Addressing addr (Handle addr', Result)
+port mkPort = readWrite $ \addr wr ->
+  [| let (read, x) = $mkPort $ portFromAddr $addr $wr
+     in (delay Nothing read, x) |]
+
+port_
+    :: forall addr' addr. ()
+    => ExpQ
+    -> Addressing addr (Handle addr')
+port_ mkPort = readWrite_ $ \addr wr ->
+  [| let read = $mkPort $ portFromAddr $addr $wr in delay Nothing read |]
 
 from
     :: forall addr' addr a. (Typeable addr', Lift addr)
