@@ -135,13 +135,12 @@ ram0 size@SNat = readWrite_ $ \addr wr ->
 
 ramFromFile
     :: SNat n
-    -> ExpQ {-FilePath-}
+    -> ExpQ {- FilePath -}
     -> Addressing addr (Handle (Index n))
 ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
-    [| fmap unpack $
-     blockRamFile size $fileName
-       (fromJustX <$> $addr)
-       (liftA2 (,) <$> $addr <*> (fmap pack <$> $wr))
+    [| packRam (blockRamFile size $fileName)
+           (fromJustX <$> $addr)
+           (liftA2 (,) <$> $addr <*> $wr)
     |]
 
 from
