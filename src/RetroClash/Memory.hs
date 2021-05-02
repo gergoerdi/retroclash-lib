@@ -3,9 +3,9 @@ module RetroClash.Memory
     ( RAM, ROM
     , packRam
 
-    , memoryMap_
+    , memoryMap, memoryMap_
 
-    , readWrite_
+    , readWrite, readWrite_
     , romFromVec, romFromFile
     , ram0, ramFromFile
     , connect
@@ -51,32 +51,57 @@ newtype Addressing addr a = Addressing
     { runAddressing :: ReaderT (Addr, Dat) (WriterT (DecsQ, MonoidalMap Name [Addr], [Component]) Q) a }
     deriving newtype (Functor, Applicative, Monad)
 
+class Backpane a where
+    backpane :: a -> ExpQ
+
+instance Backpane () where
+    backpane () = [|()|]
+
+instance (Backpane a1, Backpane a2) => Backpane (a1, a2) where
+    backpane (x1, x2) = [| ($(backpane x1), $(backpane x2)) |]
+
+instance (Backpane a1, Backpane a2, Backpane a3) => Backpane (a1, a2, a3) where
+    backpane (x1, x2, x3) = [| ($(backpane x1), $(backpane x2), $(backpane x3)) |]
+
+data Result = Result ExpQ
+
+instance Backpane Result where
+    backpane (Result e) = e
+
 compile
-    :: Addressing addr ()
+    :: forall addr a b. (Backpane a)
+    => Addressing addr a
     -> Addr
     -> Dat
     -> Component
 compile addressing addr wr = do
-    -- (x, (decs, conns, rds)) <-
-    --     runWriterT $ runReaderT (runAddressing addressing) ([| Just <$> $addr |], wr)
-    (decs, conns, outs) <-
-        execWriterT $ runReaderT (runAddressing addressing) ([| Just <$> $addr |], wr)
+    (x, (decs, conns, rds)) <-
+        runWriterT $ runReaderT (runAddressing addressing) ([| Just <$> $addr |], wr)
 
     let compAddrs = [ [d| $(varP nm) = muxA $(listE addrs) |]
                     | (nm, addrs) <- Map.toList conns
                     ]
     decs <- mconcat (decs:compAddrs)
-    letE (pure <$> decs) [| muxA $(listE outs) .<| 0 |]
+    letE (pure <$> decs) [| (muxA $(listE rds) .<| 0, $(backpane x)) |]
+
+memoryMap
+    :: forall addr a. (Backpane a)
+    => Addr
+    -> Dat
+    -> Addressing addr a
+    -> Component
+memoryMap addr wr addressing =
+    [| let addr' = $addr; wr' = $wr
+        in $(compile addressing [| addr' |] [| wr' |])
+    |]
 
 memoryMap_
-    :: Addr
+    :: forall addr dat. ()
+    => Addr
     -> Dat
     -> Addressing addr ()
-    -> Component
-memoryMap_ addr wr addressing =
-    [| let addr' = $addr; wr' = $wr
-       in $(compile addressing [| addr' |] [| wr' |])
-    |]
+    -> Dat
+memoryMap_ addr wr addressing = [| fst $(memoryMap addr wr addressing) |]
 
 connect
     :: Handle addr
@@ -99,16 +124,22 @@ matchAddr match body = Addressing $ do
           (tell (dec, mempty, mempty) >> runAddressing body)
           (addr', wr)
 
-readWrite_
+readWrite
     :: (Addr -> Dat -> Component)
-    -> Addressing addr (Handle addr')
-readWrite_ component = Addressing $ do
+    -> Addressing addr (Handle addr', Result)
+readWrite component = Addressing $ do
     rd <- lift . lift $ newName "rd"
     addr <- lift . lift $ newName "compAddr"
+    result <- lift . lift $ newName "result"
     (_, wr) <- ask
-    let decs = [d| $(varP rd) = $(component (varE addr) wr) |]
+    let decs = [d| ($(varP rd), $(varP result)) = $(component (varE addr) wr) |]
     tell (decs, Map.singleton addr mempty, mempty)
-    return $ Handle rd addr
+    return (Handle rd addr, Result (varE result))
+
+readWrite_
+    :: (Addr -> Dat -> Dat)
+    -> Addressing addr (Handle addr')
+readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
 
 romFromVec
     :: (1 <= n)
