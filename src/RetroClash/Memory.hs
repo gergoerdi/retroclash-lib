@@ -115,7 +115,7 @@ romFromVec
     => SNat n
     -> ExpQ {-(Vec n dat)-}
     -> Addressing addr (Handle (Index n))
-romFromVec size@SNat xs = readWrite_ $ \addr _wr ->
+romFromVec size xs = readWrite_ $ \addr _wr ->
     [| rom $xs (bitCoerce . fromJustX <$> $addr) |]
 
 romFromFile
@@ -123,21 +123,21 @@ romFromFile
     => SNat n
     -> ExpQ
     -> Addressing addr (Handle (Index n))
-romFromFile size@SNat fileName = readWrite_ $ \addr _wr ->
+romFromFile size fileName = readWrite_ $ \addr _wr ->
     [| fmap unpack $ romFilePow2 $fileName (bitCoerce . fromJustX <$> $addr) |]
 
 ram0
     :: (1 <= n)
     => SNat n
     -> Addressing addr (Handle (Index n))
-ram0 size@SNat = readWrite_ $ \addr wr ->
+ram0 size = readWrite_ $ \addr wr ->
     [| blockRam1 NoClearOnReset size 0 (fromJustX <$> $addr) (liftA2 (,) <$> $addr <*> $wr) |]
 
 ramFromFile
     :: SNat n
     -> ExpQ {- FilePath -}
     -> Addressing addr (Handle (Index n))
-ramFromFile size@SNat fileName = readWrite_ $ \addr wr ->
+ramFromFile size fileName = readWrite_ $ \addr wr ->
     [| packRam (blockRamFile size $fileName)
            (fromJustX <$> $addr)
            (liftA2 (,) <$> $addr <*> $wr)
