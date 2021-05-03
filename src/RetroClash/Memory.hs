@@ -87,7 +87,7 @@ compile addressing addr wr = do
                     | (nm, addrs) <- Map.toList conns
                     ]
     decs <- mconcat (decs:compAddrs)
-    letE (pure <$> decs) [| (muxA $(listE rds) .<| 0, $(backpane x)) |]
+    letE (pure <$> decs) [| (muxA $(listE rds), $(backpane x)) |]
 
 memoryMap
     :: forall addr a. (Backpane a)
