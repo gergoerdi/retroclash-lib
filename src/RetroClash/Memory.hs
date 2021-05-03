@@ -16,6 +16,7 @@ module RetroClash.Memory
     , connect
 
     , from
+    , matchJust
     , matchLeft, matchRight
     , tag
     ) where
@@ -226,6 +227,11 @@ tag
     -> Addressing (addr', addr) a
     -> Addressing addr a
 tag t = matchAddr [| \addr -> Just (t, addr) |]
+
+matchJust
+    :: Addressing addr a
+    -> Addressing (Maybe addr) a
+matchJust = matchAddr [| id |]
 
 matchLeft
     :: Addressing addr1 a
