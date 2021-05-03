@@ -3,6 +3,10 @@ module RetroClash.Memory
     ( RAM, ROM, Port, Port_
     , packRam
 
+    , Handle
+    , mapH
+
+    , Addressing
     , memoryMap, memoryMap_
 
     , conduit, readWrite, readWrite_
@@ -128,6 +132,12 @@ matchAddr match body = Addressing $ do
         runReaderT
           (tell (dec, mempty, mempty) >> runAddressing body)
           (addr', wr)
+
+mapH :: ExpQ -> Handle addr' -> Addressing addr (Handle addr')
+mapH f (Handle rd compAddr) = Addressing $ do
+    rd' <- lift . lift $ newName "rd"
+    tell ([d| $(varP rd') = $f <$> $(varE rd)|], mempty, mempty)
+    return $ Handle rd' compAddr
 
 readWrite
     :: (Addr -> Dat -> Component)
