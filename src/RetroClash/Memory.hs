@@ -42,8 +42,8 @@ import Type.Reflection (Typeable)
 
 type RAM dom addr dat = Signal dom addr -> Signal dom (Maybe (addr, dat)) -> Signal dom dat
 type ROM dom addr dat = Signal dom addr ->                                   Signal dom dat
-type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom (Maybe dat), a)
-type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom (Maybe dat)
+type Port dom addr dat a = Signal dom (Maybe (PortCommand addr dat)) -> (Signal dom dat, a)
+type Port_ dom addr dat = Signal dom (Maybe (PortCommand addr dat)) -> Signal dom dat
 
 packRam :: (BitPack dat) => RAM dom addr (BitVector (BitSize dat)) -> RAM dom addr dat
 packRam ram addr = fmap unpack . ram addr . fmap (second pack <$>)
@@ -214,14 +214,17 @@ port
     -> Addressing addr (Handle addr', Result)
 port mkPort = readWrite $ \addr wr ->
   [| let (read, x) = $mkPort $ portFromAddr $addr $wr
-     in (delay Nothing read, x) |]
+     in (delay undefined read, x)
+  |]
 
 port_
     :: forall addr' addr. ()
     => ExpQ
     -> Addressing addr (Handle addr')
 port_ mkPort = readWrite_ $ \addr wr ->
-  [| let read = $mkPort $ portFromAddr $addr $wr in delay Nothing read |]
+  [| let read = $mkPort $ portFromAddr $addr $wr
+     in delay undefined read
+  |]
 
 from
     :: forall addr' addr a. (Typeable addr', Lift addr)
