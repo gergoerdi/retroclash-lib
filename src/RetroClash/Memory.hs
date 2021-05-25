@@ -151,7 +151,8 @@ mapH f (Handle rd compAddr) = Addressing $ do
     return $ Handle rd' compAddr
 
 readWrite
-    :: (Addr -> Dat -> Component)
+    :: forall addr' addr. ()
+    => (Addr -> Dat -> Component)
     -> Addressing addr (Handle addr', Result)
 readWrite component = Addressing $ do
     rd <- lift . lift $ newName "rd"
@@ -163,7 +164,8 @@ readWrite component = Addressing $ do
     return (Handle rd addr, Result (varE result))
 
 readWrite_
-    :: (Addr -> Dat -> Dat)
+    :: forall addr' addr. ()
+    => (Addr -> Dat -> Dat)
     -> Addressing addr (Handle addr')
 readWrite_ component = fmap fst $ readWrite $ \addr wr -> [| ($(component addr wr), ()) |]
 
