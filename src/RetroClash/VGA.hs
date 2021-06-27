@@ -1,6 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, NumericUnderscores, PartialTypeSignatures #-}
 {-# LANGUAGE DuplicateRecordFields, RecordWildCards, ApplicativeDo #-}
 {-# LANGUAGE ExistentialQuantification, StandaloneDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module RetroClash.VGA
     ( VGASync(..)
@@ -73,20 +74,28 @@ end :: (KnownNat back) => VGAState visible front pulse back -> Bool
 end (BackPorch cnt) | cnt == maxBound = True
 end _ = False
 
+type Step a = a -> a
+
 data VGACounter visible
     = forall front pulse back. (KnownNat front, KnownNat pulse, KnownNat back)
-    => VGACounter (VGAState visible front pulse back -> VGAState visible front pulse back)
+    => VGACounter (Step (VGAState visible front pulse back))
+
+mkVGACounter
+    :: SNat front -> SNat pulse -> SNat back
+    -> Step (VGAState visible front pulse back)
+    -> VGACounter visible
+mkVGACounter SNat SNat SNat = VGACounter
 
 vgaCounter :: (KnownNat visible) => VGATiming visible -> VGACounter visible
-vgaCounter (VGATiming _ front@SNat pulse@SNat back@SNat) = VGACounter next
+vgaCounter (VGATiming _ front@SNat pulse@SNat back@SNat) =
+    mkVGACounter front pulse back $ \case
+        Visible cnt    -> count Visible    FrontPorch cnt
+        FrontPorch cnt -> count FrontPorch SyncPulse  cnt
+        SyncPulse cnt  -> count SyncPulse  BackPorch  cnt
+        BackPorch cnt  -> count BackPorch  Visible    cnt
   where
-    next (Visible cnt) = maybe (FrontPorch $ the front 0) Visible $ succIdx cnt
-    next (FrontPorch cnt) = maybe (SyncPulse $ the pulse 0) FrontPorch $ succIdx cnt
-    next (SyncPulse cnt) = maybe (BackPorch $ the back 0) SyncPulse $ succIdx cnt
-    next (BackPorch cnt) = maybe (Visible 0) BackPorch $ succIdx cnt
-
-    the :: SNat n -> Index n -> Index n
-    the _ = id
+    count :: (KnownNat n, KnownNat m) => (Index n -> a) -> (Index m -> a) -> Index n -> a
+    count this next = maybe (next 0) this . succIdx
 
 vgaDriver
     :: (HiddenClockResetEnable dom, KnownNat w, KnownNat h)
