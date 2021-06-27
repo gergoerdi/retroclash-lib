@@ -1,4 +1,4 @@
-resolver: clash-HEAD.yaml
+resolver: clash-1.4.2.yaml
 
 extra-deps:
   - barbies-2.0.1.0
