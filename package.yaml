@@ -1,6 +1,13 @@
-name: retroclash-lib
-version: 0.0.0
-category: hardware
+name:                retroclash-lib
+version:             0.0.0
+category:            Hardware
+synopsis:            Code shared across the code samples in the book _Retrocomputing with Clash_
+homepage:            https://github.com/gergoerdi/retroclash-lib
+license:             MIT
+author:              Gergő Érdi
+maintainer:          gergo@erdi.hu
+copyright:           2020 Gergő Érdi
+
 
 dependencies:
   - base
