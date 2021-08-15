@@ -3,6 +3,7 @@ module RetroClash.Video
     ( maskStart, maskEnd, maskSides
     , center
     , scale
+    , withBorder
     ) where
 
 import Clash.Prelude
@@ -71,3 +72,12 @@ scale k raw = (scaledNext, enable (isJust <$> scaledNext) counterNext)
         mux (not <$> changed) scaled $
         mux (counterNext .== 0) (maybe (Just 0) succIdx <$> scaled) $
         scaled
+
+withBorder
+    :: (BitPack a, BitPack a', BitSize a' ~ BitSize a)
+    => a
+    -> (x -> y -> a')
+    -> Maybe x -> Maybe y -> a
+withBorder border draw x y = case (x, y) of
+    (Just x, Just y) -> bitCoerce $ draw x y
+    _ -> border
