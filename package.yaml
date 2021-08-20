@@ -47,8 +47,8 @@ dependencies:
   - lens
   - containers
   - template-haskell
-  - lift-type
-  - monoidal-containers
+  - lift-type ^>= 0.1
+  - monoidal-containers ^>= 0.6
 
 source-dirs:
   - src
