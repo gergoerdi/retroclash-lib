@@ -1,7 +1,7 @@
 name:                retroclash-lib
 version:             0.1.0
 category:            Hardware
-synopsis:            Code shared across the code samples in the book _Retrocomputing with Clash_
+synopsis:            Code shared across the code samples in the book "Retrocomputing with Clash"
 description: |
   Clash components useful when implementing, or interfacing with,
   retro-computers:
@@ -34,9 +34,9 @@ copyright:           2021 Gergő Érdi
 
 dependencies:
   - base >= 4.14 && < 5
-  - clash-prelude ^>= 1.4
-  - clash-lib  ^>= 1.4
-  - clash-ghc ^>= 1.4
+  - clash-prelude ^>= 1.4.2
+  - clash-lib  ^>= 1.4.2
+  - clash-ghc ^>= 1.4.2
   - ghc-typelits-natnormalise
   - ghc-typelits-extra
   - ghc-typelits-knownnat
@@ -59,6 +59,7 @@ ghc-options:
   -fplugin GHC.TypeLits.Normalise
   -fplugin GHC.TypeLits.Extra.Solver
 
+# Anything that Clash uses by default should go here
 default-extensions:
   - BinaryLiterals
   - ConstraintKinds
