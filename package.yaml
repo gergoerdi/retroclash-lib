@@ -1,26 +1,49 @@
 name:                retroclash-lib
-version:             0.0.0
+version:             0.1.0
 category:            Hardware
 synopsis:            Code shared across the code samples in the book _Retrocomputing with Clash_
-homepage:            https://github.com/gergoerdi/retroclash-lib
+description: |
+  Clash components useful when implementing, or interfacing with,
+  retro-computers:
+    
+    * UART
+    
+    * Multi-digit seven-segment display driver
+    
+    * Keypad matrix scanner
+    
+    * PS/2 keyboard driver
+    
+    * VGA signal generator
+
+    * Video coordinate transformers
+    
+    * A framework for monadic CPU descriptions
+    
+    * Address maps
+    
+    * Various small utilities
+    
+homepage:            https://unsafePerform.IO/retroclash/
+github:              gergoerdi/retroclash-lib
 license:             MIT
 author:              Gergő Érdi
 maintainer:          gergo@erdi.hu
-copyright:           2020 Gergő Érdi
+copyright:           2021 Gergő Érdi
 
 
 dependencies:
-  - base
-  - clash-prelude
-  - clash-lib
-  - clash-ghc
+  - base >= 4.14 && < 5
+  - clash-prelude ^>= 1.4
+  - clash-lib  ^>= 1.4
+  - clash-ghc ^>= 1.4
   - ghc-typelits-natnormalise
   - ghc-typelits-extra
   - ghc-typelits-knownnat
 
   - mtl
   - transformers
-  - barbies
+  - barbies ^>= 2.0.1
   - lens
 
 source-dirs:
