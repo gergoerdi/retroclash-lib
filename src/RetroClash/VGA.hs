@@ -1,8 +1,7 @@
-{-# LANGUAGE ScopedTypeVariables, NumericUnderscores, PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables, NumericUnderscores #-}
 {-# LANGUAGE DuplicateRecordFields, RecordWildCards, ApplicativeDo #-}
 {-# LANGUAGE ExistentialQuantification, StandaloneDeriving #-}
 {-# LANGUAGE LambdaCase #-}
-{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 module RetroClash.VGA
     ( VGASync(..)
     , VGADriver(..)
