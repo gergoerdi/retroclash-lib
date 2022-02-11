@@ -93,6 +93,7 @@ library:
   exposed-modules:
     - RetroClash.Utils
     - RetroClash.Clock
+    - RetroClash.MultiClock.Explicit
     - RetroClash.Barbies
     - RetroClash.Keypad
     - RetroClash.SevenSegment
