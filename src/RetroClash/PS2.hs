@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards, LambdaCase #-}
+{-# LANGUAGE UndecidableInstances #-}
 module RetroClash.PS2
     ( PS2(..)
     , samplePS2
@@ -15,6 +16,7 @@ module RetroClash.PS2
     ) where
 
 import Clash.Prelude
+import Clash.Class.HasDomain
 import RetroClash.Utils
 import RetroClash.Clock
 import Control.Monad.State
@@ -26,6 +28,9 @@ data PS2 dom = PS2
     { ps2Clk :: "CLK"   ::: Signal dom Bit
     , ps2Data :: "DATA" ::: Signal dom Bit
     }
+
+type instance HasDomain dom1 (PS2 dom2) = DomEq dom1 dom2
+type instance TryDomain t (PS2 dom) = Found dom
 
 samplePS2
     :: forall dom. (HiddenClockResetEnable dom, KnownNat (ClockDivider dom (Microseconds 1)))

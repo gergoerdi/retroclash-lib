@@ -2,6 +2,7 @@
 {-# LANGUAGE DuplicateRecordFields, RecordWildCards, ApplicativeDo #-}
 {-# LANGUAGE ExistentialQuantification, StandaloneDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE UndecidableInstances #-}
 module RetroClash.VGA
     ( VGASync(..)
     , VGADriver(..)
@@ -17,6 +18,7 @@ module RetroClash.VGA
     ) where
 
 import Clash.Prelude
+import Clash.Class.HasDomain
 import RetroClash.Clock
 import RetroClash.Utils
 import Data.Maybe (isJust)
@@ -33,6 +35,9 @@ data VGAOut dom r g b = VGAOut
     , vgaG     :: "GREEN" ::: Signal dom (Unsigned g)
     , vgaB     :: "BLUE" ::: Signal dom (Unsigned b)
     }
+
+type instance HasDomain dom1 (VGAOut dom2 r g b) = DomEq dom1 dom2
+type instance TryDomain t (VGAOut dom r g b) = Found dom
 
 data VGADriver dom w h = VGADriver
     { vgaSync :: VGASync dom
