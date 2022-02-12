@@ -1,4 +1,4 @@
-resolver: clash-1.4.3.yaml
+resolver: clash-1.4.6.yaml
 
 extra-deps:
   - monoidal-containers-0.6.0.1
