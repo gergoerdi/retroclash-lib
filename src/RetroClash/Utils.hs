@@ -37,11 +37,13 @@ module RetroClash.Utils
 
     , riseEveryWhen
     , oscillateWhen
+    , riseEveryDyn
 
     , oneHot
     , roundRobin
 
     , countFromTo
+
     , nextIdx, prevIdx
     , succIdx, predIdx
     , moreIdx, lessIdx
@@ -333,6 +335,13 @@ oscillateWhen
 oscillateWhen init trigger = r
   where
     r = regEn init trigger $ not <$> r
+
+riseEveryDyn :: (Num a, Ord a, HiddenClockResetEnable dom, NFDataX a) => Signal dom a -> Signal dom Bool
+riseEveryDyn target = reached
+  where
+    cnt = register 0 $ mux reached 0 cnt'
+    cnt' = cnt + 1
+    reached = cnt' .>=. target
 
 shifterL
     :: (BitPack a, HiddenClockResetEnable dom)

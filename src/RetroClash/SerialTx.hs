@@ -3,7 +3,6 @@ module RetroClash.SerialTx
     ( serialTx
     , serialTxDyn
     , fifo
-    , TxState(..)
     , TxBit(..)
     , txStep
     ) where
@@ -13,14 +12,8 @@ import RetroClash.Utils
 import RetroClash.Clock
 
 import Control.Monad.State
-import Control.Monad.Writer
-import Data.Foldable (traverse_)
 import Data.Word
-
-data TxState n
-    = TxIdle
-    | TxBit Word32 (TxBit n)
-    deriving (Show, Eq, Generic, NFDataX)
+import Data.Maybe (isNothing)
 
 data TxBit n
     = StartBit (BitVector n)
@@ -28,36 +21,37 @@ data TxBit n
     | StopBit
     deriving (Show, Eq, Generic, NFDataX)
 
-txStep :: forall n. (KnownNat n) => Word32 -> Maybe (BitVector n) -> State (TxState n) (Bit, Bool)
-txStep bitDuration input = fmap (fmap getAny) . runWriterT $ get >>= \case
-    TxIdle -> do
-        tell $ Any True
-        traverse_ (goto . StartBit) input
-        return high
-    TxBit cnt tx -> slowly cnt tx $ case tx of
-        StartBit xs -> do
-            goto $ DataBit xs 0
-            return low
-        DataBit xs i -> do
-            let (xs', _) = bvShiftR 0 xs
-            goto $ maybe StopBit (DataBit xs') $ succIdx i
-            return $ lsb xs
-        StopBit -> do
-            put TxIdle
-            return high
-  where
-    goto = put . TxBit bitDuration
+txNext :: (KnownNat n) => Maybe (BitVector n) -> Maybe (TxBit n) -> Maybe (TxBit n)
+txNext input = \case
+    Nothing             -> StartBit <$> input
+    Just (StartBit xs)  -> Just $ DataBit xs 0
+    Just (DataBit xs i) -> Just $ let xs' = xs `shiftR` 1 in maybe StopBit (DataBit xs') $ succIdx i
+    Just StopBit        -> Nothing
 
-    slowly cnt tx act
-        | cnt > 1 = act <* put (TxBit (cnt - 1) tx)
-        | otherwise = act
+txOutput :: (KnownNat n) => Maybe (TxBit n) -> Bit
+txOutput = \case
+    Nothing             -> high
+    Just StartBit{}     -> low
+    Just (DataBit xs _) -> lsb xs
+    Just StopBit{}      -> high
+
+txStep :: forall n. (KnownNat n) => Bool -> Maybe (BitVector n) -> State (Maybe (TxBit n)) (Bit, Bool)
+txStep tick input = do
+    s <- get
+    when tick $ modify $ txNext input
+    s' <- get
+    let ready = tick && isNothing s'
+        out = txOutput s
+    return (out, ready)
 
 serialTxDyn
     :: (KnownNat n, HiddenClockResetEnable dom)
     => Signal dom Word32
     -> Signal dom (Maybe (BitVector n))
     -> (Signal dom Bit, Signal dom Bool)
-serialTxDyn bitDuration input = mealyStateB (uncurry txStep) TxIdle (bitDuration, input)
+serialTxDyn bitDuration input = mealyStateB (uncurry txStep) Nothing (tick, input)
+  where
+    tick = riseEveryDyn bitDuration
 
 serialTx
     :: forall n rate dom. (KnownNat n, KnownNat (ClockDivider dom (HzToPeriod rate)), HiddenClockResetEnable dom)
