@@ -41,13 +41,13 @@ maskSides
 maskSides k raw = transformed
   where
     changed = register Nothing raw ./=. raw
-    started = raw .== Just (snatToNum k)
+    starting = raw .== Just (snatToNum k)
 
     r = register Nothing transformed
     transformed =
         mux (not <$> changed) r $
         mux (isNothing <$> raw) (pure Nothing) $
-        mux started (pure $ Just 0) $
+        mux starting (pure $ Just 0) $
         (succIdx =<<) <$> r
 
 scale
