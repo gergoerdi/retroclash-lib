@@ -98,6 +98,7 @@ library:
     - RetroClash.SevenSegment
     - RetroClash.SerialRx
     - RetroClash.SerialTx
+    - RetroClash.I2C
     - RetroClash.VGA
     - RetroClash.Video
     - RetroClash.CPU
