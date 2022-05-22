@@ -37,6 +37,7 @@ import Data.List as L
 import Data.Map.Monoidal as Map
 
 import Language.Haskell.TH hiding (Type)
+import Language.Haskell.TH.Instances
 import LiftType
 import Type.Reflection (Typeable)
 

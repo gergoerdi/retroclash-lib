@@ -47,6 +47,7 @@ dependencies:
   - lens
   - containers
   - template-haskell
+  - th-orphans >= 0.13.11
   - lift-type ^>= 0.1
   - monoidal-containers ^>= 0.6
 
