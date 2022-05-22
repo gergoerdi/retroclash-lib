@@ -37,6 +37,7 @@ import Data.List as L
 import Data.Map.Monoidal as Map
 
 import Language.Haskell.TH hiding (Type)
+import Language.Haskell.TH.Instances
 import LiftType
 import Type.Reflection (Typeable)
 
@@ -58,14 +59,6 @@ type Dat = ExpQ
 
 -- | type Component dom dat a = TExpQ (Signal dom (Maybe dat))
 type Component = ExpQ
-
-#if !MIN_VERSION_template_haskell(2,17,0)
-instance (Semigroup a) => Semigroup (Q a) where
-  (<>) = liftA2 (<>)
-
-instance (Monoid a) => Monoid (Q a) where
-  mempty = pure mempty
-#endif
 
 newtype Addressing addr a = Addressing
     { runAddressing :: ReaderT (Addr, Dat) (WriterT (DecsQ, MonoidalMap Name [Addr], [Component]) Q) a }
