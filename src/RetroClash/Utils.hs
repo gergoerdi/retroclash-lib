@@ -76,6 +76,7 @@ import Clash.Prelude
 import RetroClash.Clock
 import Data.Maybe (fromMaybe)
 import Control.Monad.State
+import Control.Monad
 import qualified Data.Foldable as F
 import Data.Monoid
 

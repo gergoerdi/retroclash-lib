@@ -21,6 +21,7 @@ import RetroClash.Utils
 import RetroClash.Clock
 import Control.Monad.State
 import Control.Monad.Trans.Writer
+import Control.Monad
 import Data.Monoid (Last(..))
 import Data.Foldable (traverse_)
 

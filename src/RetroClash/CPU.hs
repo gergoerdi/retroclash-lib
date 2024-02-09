@@ -10,6 +10,7 @@ import Data.Functor.Identity
 import Control.Monad.Writer
 import Control.Monad.State
 import Control.Lens (Setter', scribe, iso)
+import Data.Monoid (Last(..))
 
 import Barbies
 import Barbies.Bare
