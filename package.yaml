@@ -87,7 +87,6 @@ default-extensions:
   - TemplateHaskell
   - TypeApplications
   - TypeFamilies
-  - TypeInType
   - TypeOperators
 
 library:

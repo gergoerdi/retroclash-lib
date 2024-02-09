@@ -19,6 +19,7 @@ import Clash.Prelude
 import Clash.Class.HasDomain
 import RetroClash.Utils
 import RetroClash.Clock
+import Control.Monad (guard, when)
 import Control.Monad.State
 import Control.Monad.Trans.Writer
 import Data.Monoid (Last(..))

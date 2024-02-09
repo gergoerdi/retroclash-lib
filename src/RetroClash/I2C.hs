@@ -1,10 +1,11 @@
-{-# LANGUAGE StandaloneDeriving, LambdaCase #-}
+{-# LANGUAGE StandaloneDeriving, LambdaCase, UndecidableInstances #-}
 {-# OPTIONS_GHC -fconstraint-solver-iterations=10 #-}
 module RetroClash.I2C (i2cMaster) where
 
 import Clash.Prelude
 import RetroClash.Utils
 import RetroClash.Clock
+import Control.Monad (when)
 import Control.Monad.State
 import Data.Maybe (isJust, isNothing)
 

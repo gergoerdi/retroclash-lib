@@ -75,6 +75,7 @@ module RetroClash.Utils
 import Clash.Prelude
 import RetroClash.Clock
 import Data.Maybe (fromMaybe)
+import Control.Monad (guard)
 import Control.Monad.State
 import qualified Data.Foldable as F
 import Data.Monoid

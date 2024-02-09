@@ -12,9 +12,11 @@ import Clash.Prelude
 import RetroClash.Utils
 import RetroClash.Clock
 
+import Control.Monad (mplus)
 import Control.Monad.State
 import Control.Monad.Writer
 import Data.Foldable (traverse_)
+import Data.Monoid (Any(..))
 import Data.Word
 
 data TxState n

@@ -60,7 +60,7 @@ delayedRom
 delayedRom syncRom addr = unsafeFromSignal $ syncRom (toSignal addr)
 
 delayedBlockRam1
-    :: (1 <= n, Enum addr, NFDataX a, HiddenClockResetEnable dom)
+    :: (1 <= n, Enum addr, NFDataX addr, NFDataX a, HiddenClockResetEnable dom)
     => ResetStrategy r
     -> SNat n
     -> a
