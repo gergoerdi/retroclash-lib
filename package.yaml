@@ -1,5 +1,5 @@
 name:                retroclash-lib
-version:             0.1.2.1
+version:             0.1.2.2
 category:            Hardware
 synopsis:            Code shared across the code samples in the book "Retrocomputing with Clash"
 description: |
