@@ -54,7 +54,28 @@ dependencies:
 source-dirs:
   - src
 
+# For compatibility with GHC 9.6 some packages need to be specified as ghc-options
+# Check if they are installed using:
+#
+# stack exec -- ghc-pkg find-module GHC.TypeLits.Extra.Solver
+# (repeat the above for other plugins) 
+#
+# If not found, build them:
+#
+# stack build ghc-tcplugins-extra-0.4.5
+# stack build ghc-typelits-natnormalise-0.7.9
+# stack build ghc-typelits-knownnat-0.7.10
+# stack build ghc-typelits-extra-0.4.6
+# 
+# Then run the above ghc-pkh find module command again to see where the packages are built, and then register them using:
+# ghc-pkg -v register <pakage path>/ghc-tcplugins-extra-0.4.5-LoPBimuwmAgCj5M5ykKFtm.conf
+# ghc-pkg -v register <pakage path>/ghc-typelits-natnormalise-0.7.9-2LocrQy3VVV7lBggmw970k.conf
+# ghc-pkg -v register <pakage path>/ghc-typelits-knownnat-0.7.10-fJlMrMNkyh9qGWAkYZ6O6.conf
+# ghc-pkg -v register <pakage path>/ghc-typelits-extra-0.4.6-L6c8cgcuJuRHcCyvlVGpAw.conf
 ghc-options:
+  -package ghc-typelits-extra
+  -package ghc-typelits-natnormalise
+  -package ghc-typelits-knownnat
   -fexpose-all-unfoldings -fno-worker-wrapper
   -fplugin GHC.TypeLits.KnownNat.Solver
   -fplugin GHC.TypeLits.Normalise
