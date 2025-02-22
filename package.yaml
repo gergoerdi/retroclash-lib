@@ -37,17 +37,17 @@ dependencies:
   - clash-prelude >= 1.4.2 && < 2.0
   - clash-lib  >= 1.4.2 && < 2.0
   - clash-ghc >= 1.4.2 && < 2.0
-  - ghc-typelits-natnormalise
-  - ghc-typelits-extra
-  - ghc-typelits-knownnat
+  - ghc-typelits-natnormalise <= 1.0
+  - ghc-typelits-extra <= 1.0
+  - ghc-typelits-knownnat <= 1.0
 
-  - mtl
-  - transformers
+  - mtl < 3
+  - transformers < 0.7
   - barbies ^>= 2.0.1
-  - lens
-  - containers
-  - template-haskell
-  - th-orphans >= 0.13.11
+  - lens < 6
+  - containers < 0.8
+  - template-haskell < 2.24
+  - th-orphans ^>= 0.13.11
   - lift-type ^>= 0.1
   - monoidal-containers ^>= 0.6
 
