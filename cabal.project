@@ -1,0 +1,8 @@
+with-compiler: ghc-9.10.1
+
+packages:
+        *.cabal
+
+constraints:
+        -- clash-prelude >= 1.8.0 && < 1.10.0
+        clash-prelude >= 1.10.0

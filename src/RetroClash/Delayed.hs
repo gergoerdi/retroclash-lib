@@ -1,4 +1,5 @@
 {-# LANGUAGE RecordWildCards, RankNTypes #-}
+{-# LANGUAGE CPP #-}
 module RetroClash.Delayed
     ( delayVGA
 
@@ -61,7 +62,11 @@ delayedRom syncRom addr = unsafeFromSignal $ syncRom (toSignal addr)
 
 delayedBlockRam1
     :: (1 <= n, Enum addr, NFDataX addr, NFDataX a, HiddenClockResetEnable dom)
+#if MIN_VERSION_clash_prelude(1,10,0)
+    => ResetStrategy r ()
+#else
     => ResetStrategy r
+#endif
     -> SNat n
     -> a
     -> DSignal dom d addr

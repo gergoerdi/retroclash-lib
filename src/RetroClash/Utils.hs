@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, ApplicativeDo, Rank2Types #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE CPP #-}
 module RetroClash.Utils
     ( withResetEnableGen
     , withEnableGen
@@ -152,6 +153,7 @@ instance IsActive Low where
     fromActive = fromActiveDyn Low . activeLevel
     toActive = MkActive . toActiveDyn Low
 
+#if !MIN_VERSION_clash_prelude(1,10,0)
 infix 4 ==.
 (==.) :: (Eq a, Functor f) => a -> f a -> f Bool
 x ==. fy = (x ==) <$> fy
@@ -187,6 +189,7 @@ fx .<= y = (<= y) <$> fx
 infix 4 <=.
 (<=.) :: (Ord a, Functor f) => a -> f a -> f Bool
 x <=. fy = (x <=) <$> fy
+#endif
 
 (.!!.) :: (KnownNat n, Enum i, Applicative f) => f (Vec n a) -> f i -> f a
 (.!!.) = liftA2 (!!)
@@ -265,7 +268,7 @@ singlePort :: (Applicative f) => (f addr -> f (Maybe (addr, wr)) -> r) -> (f add
 singlePort mem addr wr = mem addr (packWrite <$> addr <*> wr)
 
 unbraid
-    :: (KnownNat n, KnownNat k, 1 <= n, 1 <= (n * 2 ^ k), (CLog 2 (2 ^ k)) ~ k, (CLog 2 (n * 2 ^ k)) ~ (CLog 2 n + k))
+    :: (KnownNat n, KnownNat k, 1 <= n, 1 <= (n * 2 ^ k), BitSize (Index (n * 2 ^ k)) ~ BitSize (Index n) + BitSize (Index (2 ^ k)))
     => Maybe (Index (n * 2 ^ k))
     -> Vec (2 ^ k) (Maybe (Index n))
 unbraid Nothing = repeat Nothing
@@ -310,7 +313,7 @@ half :: (Bits a) => a -> a
 half x = x `shiftR` 1
 
 halfIndex
-    :: (KnownNat n, 1 <= (2 * n), (CLog 2 (2 * n)) ~ (CLog 2 n + 1))
+    :: (KnownNat n, 1 <= (2 * n), BitSize (Index (2 * n)) ~ BitSize (Index n) + 1)
     => Index (2 * n)
     -> Index n
 halfIndex = fst . bitCoerce @_ @(_, Bit)
